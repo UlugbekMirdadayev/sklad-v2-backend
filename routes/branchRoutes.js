@@ -1,60 +1,90 @@
 const express = require("express");
 const router = express.Router();
-const Branch = require("../models/Branch");
+const Branch = require("../models/branches/branch.model");
 const auth = require("../middleware/authMiddleware");
 
-router.post("/", auth, async (req, res) => {
-  try {
-    const branch = new Branch(req.body);
-    await branch.save();
-    res.status(201).json(branch);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
+router.use(auth);
 
-router.get("/", auth, async (req, res) => {
+// Получение списка всех филиалов
+router.get("/", async (req, res) => {
   try {
-    const branches = await Branch.find().populate("manager", "-password");
+    const branches = await Branch.find();
     res.json(branches);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
-router.get("/:id", auth, async (req, res) => {
+// Получение одного филиала по ID
+router.get("/:id", async (req, res) => {
   try {
-    const branch = await Branch.findById(req.params.id).populate(
-      "manager",
-      "-password"
-    );
-    if (!branch) return res.status(404).json({ error: "Filial topilmadi" });
+    const branch = await Branch.findById(req.params.id);
+    if (!branch) {
+      return res.status(404).json({ message: "Филиал не найден" });
+    }
     res.json(branch);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
-router.put("/:id", auth, async (req, res) => {
+// Создание нового филиала
+router.post("/", async (req, res) => {
+  const branch = new Branch({
+    name: req.body.name,
+    address: req.body.address,
+    phone: req.body.phone,
+    isActive: req.body.isActive,
+  });
+
   try {
-    const updated = await Branch.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    if (!updated) return res.status(404).json({ error: "Filial topilmadi" });
-    res.json(updated);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+    const newBranch = await branch.save();
+    res.status(201).json(newBranch);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 });
 
-router.delete("/:id", auth, async (req, res) => {
+// Обновление филиала
+router.patch("/:id", async (req, res) => {
   try {
-    const deleted = await Branch.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Filial topilmadi" });
-    res.json({ message: "Filial o‘chirildi" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const branch = await Branch.findById(req.params.id);
+    if (!branch) {
+      return res.status(404).json({ message: "Филиал не найден" });
+    }
+
+    if (req.body.name != null) {
+      branch.name = req.body.name;
+    }
+    if (req.body.address != null) {
+      branch.address = req.body.address;
+    }
+    if (req.body.phone != null) {
+      branch.phone = req.body.phone;
+    }
+    if (req.body.isActive != null) {
+      branch.isActive = req.body.isActive;
+    }
+
+    const updatedBranch = await branch.save();
+    res.json(updatedBranch);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Удаление филиала
+router.delete("/:id", async (req, res) => {
+  try {
+    const branch = await Branch.findById(req.params.id);
+    if (!branch) {
+      return res.status(404).json({ message: "Филиал не найден" });
+    }
+
+    await branch.deleteOne();
+    res.json({ message: "Филиал успешно удален" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 

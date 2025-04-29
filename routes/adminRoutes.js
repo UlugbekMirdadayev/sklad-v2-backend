@@ -1,418 +1,246 @@
 const express = require("express");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const Worker = require("../models/Worker");
-const Admin = require("../models/Admin");
-const validatePhoneNumber = require("../middleware/numberFormat");
-const adminAuth = require("../middleware/authMiddleware");
-
 const router = express.Router();
+const Admin = require("../models/admin/admin.model");
+const authMiddleware = require("../middleware/authMiddleware");
+const { body, validationResult } = require("express-validator");
+const jwt = require("jsonwebtoken");
 
-// Admin ro'yxatdan o'tish (Faqat super admin)
-router.post("/register", adminAuth, async (req, res) => {
+// Валидация для создания/обновления администратора
+const adminValidation = [
+  body("username")
+    .trim()
+    .notEmpty()
+    .withMessage("Имя пользователя обязательно"),
+  body("password")
+    .isLength({ min: 6 })
+    .withMessage("Пароль должен быть не менее 6 символов"),
+  body("email").isEmail().withMessage("Введите корректный email"),
+  body("fullName").trim().notEmpty().withMessage("Полное имя обязательно"),
+  body("branch").isMongoId().withMessage("Неверный ID филиала"),
+];
+
+// Регистрация нового администратора (только для суперадмина)
+router.post("/register", authMiddleware, adminValidation, async (req, res) => {
   try {
-    // Super adminni tekshirish
-    const { adminId } = req.user;
-    const superAdmin = await Admin.findOne({
-      _id: adminId,
-      role: "superadmin",
-    });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-    if (!superAdmin) {
+    // Проверка роли
+    if (req.user.role !== "superadmin") {
       return res.status(403).json({
-        message:
-          "Aksess rad etildi. Yangi adminlarni faqat super adminlar ro'yxatga olishlari mumkin.",
+        message: "Только суперадмин может создавать новых администраторов",
       });
     }
 
-    const { phone, password, role, fullName } = req.body;
+    const { username, password, email, fullName, branch, role } = req.body;
 
-    // Kiritilgan ma'lumotlarni tekshirish
-    if (!phone || !password || !fullName || !role) {
-      return res.status(400).json({
-        message:
-          "Iltimos, barcha zarur maydonlarni to'ldiring: telefon raqami, parol, to'liq ism, va rol.",
-      });
-    }
-
-    // Telefon raqamini tekshirish
-    if (!validatePhoneNumber(phone)) {
-      return res.status(400).json({
-        message:
-          "Noto'g'ri telefon raqami formati. +998XXXXXXXXX formatida bo'lishi kerak.",
-      });
-    }
-    // Rolni tekshirish
-    if (!["manager", "admin"].includes(role)) {
-      return res.status(400).json({
-        message: `Noto'g'ri rol => ${role}. Yoqilgan rollar: "manager", "admin"`,
-      });
-    }
-
-    // Adminning mavjudligini tekshirish
-    const existingAdmin = await Admin.findOne({ phone });
+    // Проверка существования пользователя
+    const existingAdmin = await Admin.findOne({
+      $or: [{ username }, { email }],
+    });
     if (existingAdmin) {
       return res.status(400).json({
-        message: "Bu telefon raqami bilan admin allaqachon mavjud.",
+        message: "Пользователь с таким email или username уже существует",
       });
     }
 
-    // Parolni hashlash
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Yangi adminni yaratish
-    const newAdmin = new Admin({
-      phone,
+    const admin = new Admin({
+      username,
+      password,
+      email,
       fullName,
-      password: hashedPassword,
-      role,
+      branch,
+      role: role || "admin",
     });
 
-    await newAdmin.save();
-
-    // JWT token yaratish
-    const token = jwt.sign(
-      {
-        adminId: newAdmin._id,
-        role: newAdmin.role,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE }
-    );
-
-    // Parolsiz admin ma'lumotlarini yuborish
-    const responseAdmin = newAdmin.toObject();
-    delete responseAdmin.password;
-
-    res.status(201).json({
-      message: "Admin muvaffaqiyatli yaratildi",
-      token,
-      admin: responseAdmin,
-    });
+    await admin.save();
+    res.status(201).json({ message: "Администратор успешно создан" });
   } catch (error) {
-    res.status(500).json({
-      message: "Server xatosi",
-      error: error.message,
-    });
+    res.status(500).json({ message: error.message });
   }
 });
 
-// Admin login (Kirish)
+// Вход в систему
 router.post("/login", async (req, res) => {
   try {
-    const { phone, password } = req.body;
+    const { username, password } = req.body;
 
-    const admin = await Admin.findOne({ phone });
+    const admin = await Admin.findOne({ username });
     if (!admin) {
       return res
-        .status(404)
-        .json({ message: "Bu telefon raqami ro'yxatdan o'tmagan!" });
+        .status(401)
+        .json({ message: "Неверное имя пользователя или пароль" });
     }
 
-    const isMatch = await bcrypt.compare(password, admin.password);
+    const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Noto'g'ri parol!" });
+      return res
+        .status(401)
+        .json({ message: "Неверное имя пользователя или пароль" });
     }
+
+    if (!admin.isActive) {
+      return res.status(403).json({ message: "Аккаунт деактивирован" });
+    }
+
+    // Обновляем время последнего входа
+    admin.lastLogin = new Date();
+    await admin.save();
 
     const token = jwt.sign(
-      {
-        adminId: admin._id,
-        role: admin.role,
-      },
+      { adminId: admin._id, role: admin.role },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE }
+      { expiresIn: "24h" }
     );
 
-    const userData = admin.toObject();
-    delete userData.password;
-
-    res.json({ message: "Muvaffaqiyatli kirish!", admin: userData, token });
-  } catch (error) {
-    res.status(500).json({ message: `Xatolik yuz berdi! ${error.message}` });
-  }
-});
-
-// Worker yaratish (Admin tomonidan)
-router.post("/worker/create", adminAuth, async (req, res) => {
-  try {
-    const { phone, fullName, password, role } = req.body;
-
-    if (!fullName) {
-      return res.status(400).json({
-        message: "fullName: 'fullName' maydoni majburiy.",
-      });
-    }
-
-    if (!phone) {
-      return res.status(400).json({
-        message: "phone: 'phone' maydoni majburiy.",
-      });
-    }
-    if (!password) {
-      return res.status(400).json({
-        message: "password: 'password' maydoni majburiy.",
-      });
-    }
-
-    const existingWorker = await Worker.findOne({
-      phone,
-    });
-    if (existingWorker) {
-      return res
-        .status(400)
-        .json({ message: "Bu telefon raqami allaqachon ro'yxatdan o'tgan!" });
-    }
-
-    // Telefon raqamini tekshirish
-    if (!validatePhoneNumber(phone)) {
-      return res.status(400).json({
-        message:
-          "Noto'g'ri telefon raqami formati. +998XXXXXXXXX formatida bo'lishi kerak.",
-      });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const newWorker = new Worker({
-      phone,
-      fullName,
-      password: hashedPassword,
-      role: role ?? null,
-    });
-
-    await newWorker.save();
-
-    const responseWorker = newWorker.toObject();
-    delete responseWorker.password;
-
-    res.status(201).json({
-      message: "Muvaffaqiyatli ro'yxatdan o'tdi!",
-      worker: responseWorker,
-    });
-  } catch (error) {
-    res.status(500).json({ message: `Xatolik yuz berdi! ${error.message}` });
-  }
-});
-
-// Workerlarni ko'rish (Admin tomonidan)
-router.get("/workers", adminAuth, async (req, res) => {
-  try {
-    const workers = await Worker.find({
-      isDeleted: false,
-    }).select("-password");
-
-    res.status(200).json({
-      message: "Workerlar ro'yxati",
-      workers,
-    });
-  } catch (error) {
-    res.status(500).json({ message: `Xatolik yuz berdi! ${error.message}` });
-  }
-});
-
-// Workerlarni yangilash (Admin tomonidan)
-router.put("/worker/update/:id", adminAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { fullName, phone, password, role } = req.body;
-
-    // Workerni tekshirish
-    const worker = await Worker.findById(id);
-    if (!worker) {
-      return res.status(404).json({ message: "Worker topilmadi!" });
-    }
-
-    // Telefon raqamini tekshirish
-    if (phone && !validatePhoneNumber(phone)) {
-      return res.status(400).json({
-        message:
-          "Noto'g'ri telefon raqami formati. +998XXXXXXXXX formatida bo'lishi kerak.",
-      });
-    }
-
-    // Parolni yangilash
-    let hashedPassword;
-    if (password) {
-      const salt = await bcrypt.genSalt(10);
-      hashedPassword = await bcrypt.hash(password, salt);
-    }
-
-    // Workerni yangilash
-    const updatedWorker = await Worker.findByIdAndUpdate(
-      id,
-      {
-        fullName,
-        phone,
-        password: hashedPassword,
-        role,
+    res.json({
+      token,
+      admin: {
+        id: admin._id,
+        username: admin.username,
+        email: admin.email,
+        fullName: admin.fullName,
+        role: admin.role,
+        branch: admin.branch,
       },
-      { new: true }
-    );
-
-    res.status(200).json({
-      message: "Worker muvaffaqiyatli yangilandi!",
-      worker: updatedWorker,
     });
   } catch (error) {
-    res.status(500).json({ message: `Xatolik yuz berdi! ${error.message}` });
+    res.status(500).json({ message: error.message });
   }
 });
 
-// Workerni o'chirish (Admin tomonidan)
-router.delete("/worker/delete/:id", adminAuth, async (req, res) => {
+// Получение профиля администратора
+router.get("/profile", authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { adminId } = req.user;
-
-    if (!adminId) {
-      return res
-        .status(403)
-        .json({ message: "Aksess rad etildi. Admin ID topilmadi." });
-    }
-
-    // Adminni tekshirish
-    const admin = await Admin.findById(adminId);
+    const admin = await Admin.findById(req.user.adminId).select("-password");
     if (!admin) {
-      return res.status(404).json({ message: "Admin topilmadi!" });
+      return res.status(404).json({ message: "Администратор не найден" });
     }
-
-    if (!id) {
-      return res.status(400).json({ message: "Worker ID topilmadi!" });
-    }
-
-    // Workerni tekshirish
-    const worker = await Worker.findById(id);
-    if (!worker) {
-      return res.status(404).json({ message: "Worker topilmadi!" });
-    }
-
-    // Workerni o'chirish
-    await Worker.findByIdAndUpdate(
-      id,
-      {
-        isDeleted: true,
-        deletedAt: new Date(),
-      },
-      { new: true }
-    );
-
-    res.status(200).json({
-      message: "Worker muvaffaqiyatli o'chirildi!",
-    });
+    res.json(admin);
   } catch (error) {
-    res.status(500).json({ message: `Xatolik yuz berdi! ${error.message}` });
+    res.status(500).json({ message: error.message });
   }
 });
 
-// Managerlarni ko'rish (Admin tomonidan)
-router.get("/", adminAuth, async (req, res) => {
-  try {
-    const admins = await Admin.find({
-      role: { $in: ["manager", "admin"] },
-      isDeleted: false,
-    }).select("-password");
+// Обновление профиля администратора
+router.patch(
+  "/profile",
+  authMiddleware,
+  [
+    body("email").optional().isEmail().withMessage("Введите корректный email"),
+    body("fullName")
+      .optional()
+      .trim()
+      .notEmpty()
+      .withMessage("Полное имя не может быть пустым"),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
 
-    res.status(200).json({
-      message: "Managerlar ro'yxati",
-      admins,
-    });
+      const admin = await Admin.findById(req.user.adminId);
+      if (!admin) {
+        return res.status(404).json({ message: "Администратор не найден" });
+      }
+
+      const { email, fullName } = req.body;
+
+      if (email && email !== admin.email) {
+        const existingAdmin = await Admin.findOne({ email });
+        if (existingAdmin) {
+          return res.status(400).json({ message: "Email уже используется" });
+        }
+        admin.email = email;
+      }
+
+      if (fullName) {
+        admin.fullName = fullName;
+      }
+
+      await admin.save();
+      res.json({ message: "Профиль успешно обновлен" });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// Смена пароля
+router.post(
+  "/change-password",
+  authMiddleware,
+  [
+    body("currentPassword").notEmpty().withMessage("Текущий пароль обязателен"),
+    body("newPassword")
+      .isLength({ min: 6 })
+      .withMessage("Новый пароль должен быть не менее 6 символов"),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const admin = await Admin.findById(req.user.adminId);
+      if (!admin) {
+        return res.status(404).json({ message: "Администратор не найден" });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+
+      const isMatch = await admin.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ message: "Неверный текущий пароль" });
+      }
+
+      admin.password = newPassword;
+      await admin.save();
+
+      res.json({ message: "Пароль успешно изменен" });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// Получение списка администраторов (только для суперадмина)
+router.get("/", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "superadmin") {
+      return res.status(403).json({ message: "Доступ запрещен" });
+    }
+
+    const admins = await Admin.find().select("-password");
+    res.json(admins);
   } catch (error) {
-    res.status(500).json({ message: `Xatolik yuz berdi! ${error.message}` });
+    res.status(500).json({ message: error.message });
   }
 });
 
-// Adminni yangilash (Admin tomonidan)
-router.put("/update/:id", adminAuth, async (req, res) => {
+// Деактивация администратора (только для суперадмина)
+router.patch("/:id/deactivate", authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { fullName, phone, password, role } = req.body;
+    if (req.user.role !== "superadmin") {
+      return res.status(403).json({ message: "Доступ запрещен" });
+    }
 
-    // Adminni tekshirish
-    const admin = await Admin.findById(id);
+    const admin = await Admin.findById(req.params.id);
     if (!admin) {
-      return res.status(404).json({ message: "Admin topilmadi!" });
+      return res.status(404).json({ message: "Администратор не найден" });
     }
 
-    // Telefon raqamini tekshirish
-    if (phone && !validatePhoneNumber(phone)) {
-      return res.status(400).json({
-        message:
-          "Noto'g'ri telefon raqami formati. +998XXXXXXXXX formatida bo'lishi kerak.",
-      });
-    }
+    admin.isActive = false;
+    await admin.save();
 
-    // Parolni yangilash
-    let hashedPassword;
-    if (password) {
-      const salt = await bcrypt.genSalt(10);
-      hashedPassword = await bcrypt.hash(password, salt);
-    }
-
-    // Adminni yangilash
-    const updatedAdmin = await Admin.findByIdAndUpdate(
-      id,
-      {
-        fullName,
-        phone,
-        password: hashedPassword,
-        role,
-      },
-      { new: true }
-    );
-
-    res.status(200).json({
-      message: "Admin muvaffaqiyatli yangilandi!",
-      admin: updatedAdmin,
-    });
+    res.json({ message: "Администратор успешно деактивирован" });
   } catch (error) {
-    res.status(500).json({ message: `Xatolik yuz berdi! ${error.message}` });
-  }
-});
-
-// Adminni o'chirish (Admin tomonidan)
-
-router.delete("/delete/:id", adminAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { adminId } = req.user;
-
-    // Adminni tekshirish
-    const admin = await Admin.findById(id);
-    if (!admin) {
-      return res.status(404).json({ message: "Admin topilmadi!" });
-    }
-    const { role } = await Admin.findById(adminId);
-
-    if (role !== "superadmin") {
-      return res.status(403).json({
-        message:
-          "Aksess rad etildi. Faqat super adminlar adminlarni o'chirishi mumkin.",
-      });
-    }
-
-    // O'chirishdan oldin adminni tekshirish
-    if (admin._id.toString() === adminId) {
-      return res.status(400).json({
-        message: "O'zingizni o'chira olmaysiz!",
-      });
-    }
-    // Adminni o'chirish
-    await Admin.findByIdAndUpdate(
-      id,
-      {
-        isDeleted: true,
-        deletedAt: new Date(),
-      },
-      { new: true }
-    );
-
-    res.status(200).json({
-      message: "Admin muvaffaqiyatli o'chirildi!",
-    });
-  } catch (error) {
-    res.status(500).json({ message: `Xatolik yuz berdi! ${error.message}` });
+    res.status(500).json({ message: error.message });
   }
 });
 

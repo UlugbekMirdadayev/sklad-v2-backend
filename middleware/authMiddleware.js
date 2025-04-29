@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
-const Worker = require("../models/Worker");
-const Admin = require("../models/Admin");
+const Client = require("../models/clients/client.model");
+const Admin = require("../models/admin/admin.model");
 
 const authMiddleware = async (req, res, next) => {
   const token = req.header("Authorization");
@@ -21,15 +21,15 @@ const authMiddleware = async (req, res, next) => {
     );
     req.user = decoded;
 
-    if (decoded.workerId) {
+    if (decoded.clientId) {
       try {
-        // Find the worker by ID
-        const worker = await Worker.findById(decoded.workerId);
+        // Find the client by ID
+        const client = await Client.findById(decoded.clientId);
 
-        if (!worker) {
+        if (!client) {
           return res
             .status(401)
-            .json({ message: "Worker Token is invalid or expired!" });
+            .json({ message: "Client Token is invalid or expired!" });
         }
         // If all checks pass, proceed to the next middleware
         next();

@@ -7,6 +7,13 @@ const app = express();
 const server = http.createServer(app);
 const branchRoutes = require("./routes/branchRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const debtorsRoutes = require("./routes/debtorsRoutes");
+const debtorPaymentHistoryRoutes = require("./routes/debtorPaymentHistoryRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const producRoutes = require("./routes/productRoutes");
+const batchRoutes = require("./routes/batchRoutes");
+const serviceRoutes = require("./routes/serviceRoutes");
+const smsRoutes = require("./routes/smsRoutes");
 
 // Middleware
 app.use(express.json());
@@ -38,6 +45,13 @@ app.use((req, res) => {
 
 app.use("/api/branches", branchRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/debtors", debtorsRoutes);
+app.use("/api/debtor-payments", debtorPaymentHistoryRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/producs", producRoutes);
+app.use("/api/batch", batchRoutes);
+app.use("/api/service", serviceRoutes);
+app.use("/api/sms", smsRoutes);
 
 // Server startup
 const PORT = process.env.PORT || 8080;

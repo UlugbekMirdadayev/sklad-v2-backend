@@ -1,0 +1,326 @@
+{
+  "info": {
+    "name": "Sklad API",
+    "description": "API для управления складом и клиентами",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Аутентификация",
+      "item": [
+        {
+          "name": "Регистрация",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"user\",\n    \"password\": \"password123\",\n    \"role\": \"admin\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Логин",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"user\",\n    \"password\": \"password123\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Филиалы",
+      "item": [
+        {
+          "name": "Создать филиал",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/branches",
+              "host": ["{{base_url}}"],
+              "path": ["branches"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Главный филиал\",\n    \"address\": \"ул. Примерная, 123\",\n    \"phone\": \"+998901234567\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Получить все филиалы",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/branches",
+              "host": ["{{base_url}}"],
+              "path": ["branches"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Клиенты",
+      "item": [
+        {
+          "name": "Создать клиента",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/clients",
+              "host": ["{{base_url}}"],
+              "path": ["clients"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Иван Иванов\",\n    \"phone\": \"+998901234567\",\n    \"address\": \"ул. Примерная, 123\",\n    \"branch\": \"{{branch_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Получить всех клиентов",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/clients",
+              "host": ["{{base_url}}"],
+              "path": ["clients"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Должники",
+      "item": [
+        {
+          "name": "Создать должника",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/debtors",
+              "host": ["{{base_url}}"],
+              "path": ["debtors"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"client\": \"{{client_id}}\",\n    \"amount\": 1000,\n    \"dueDate\": \"2024-12-31\",\n    \"description\": \"Задолженность за товар\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Получить всех должников",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/debtors",
+              "host": ["{{base_url}}"],
+              "path": ["debtors"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Товары",
+      "item": [
+        {
+          "name": "Создать товар",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products",
+              "host": ["{{base_url}}"],
+              "path": ["products"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Товар 1\",\n    \"price\": 1000,\n    \"quantity\": 10,\n    \"branch\": \"{{branch_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Получить все товары",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products",
+              "host": ["{{base_url}}"],
+              "path": ["products"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Услуги",
+      "item": [
+        {
+          "name": "Создать услугу",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/services",
+              "host": ["{{base_url}}"],
+              "path": ["services"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Услуга 1\",\n    \"price\": 500,\n    \"branch\": \"{{branch_id}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Получить все услуги",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/services",
+              "host": ["{{base_url}}"],
+              "path": ["services"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SMS",
+      "item": [
+        {
+          "name": "Отправить SMS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sms/send",
+              "host": ["{{base_url}}"],
+              "path": ["sms", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"phoneNumber\": \"+998901234567\",\n    \"message\": \"Тестовое сообщение\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Получить историю SMS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/sms",
+              "host": ["{{base_url}}"],
+              "path": ["sms"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "branch_id",
+      "value": "your_branch_id_here",
+      "type": "string"
+    },
+    {
+      "key": "client_id",
+      "value": "your_client_id_here",
+      "type": "string"
+    }
+  ]
+} 

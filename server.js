@@ -22,15 +22,15 @@ app.use(cors());
 // Connect to MongoDB
 connectDB();
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    message: "Internal Server Error",
-    error: process.env.NODE_ENV === "development" ? err.message : undefined,
-    timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
-  });
-});
+app.use("/api/branches", branchRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/debtors", debtorsRoutes);
+app.use("/api/debtor-payments", debtorPaymentHistoryRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/producs", producRoutes);
+app.use("/api/batch", batchRoutes);
+app.use("/api/service", serviceRoutes);
+app.use("/api/sms", smsRoutes);
 
 // Handle 404 errors
 app.use((req, res) => {
@@ -43,15 +43,15 @@ app.use((req, res) => {
     : res.status(404).sendFile(__dirname + "/public/404.html");
 });
 
-app.use("/api/branches", branchRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/debtors", debtorsRoutes);
-app.use("/api/debtor-payments", debtorPaymentHistoryRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api/producs", producRoutes);
-app.use("/api/batch", batchRoutes);
-app.use("/api/service", serviceRoutes);
-app.use("/api/sms", smsRoutes);
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    message: "Internal Server Error",
+    error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
+  });
+});
 
 // Server startup
 const PORT = process.env.PORT || 8080;

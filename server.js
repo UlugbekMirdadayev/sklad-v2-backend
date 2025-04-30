@@ -7,6 +7,7 @@ const app = express();
 const server = http.createServer(app);
 const branchRoutes = require("./routes/branchRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const clientRoutes = require("./routes/clientRoutes");
 const debtorsRoutes = require("./routes/debtorsRoutes");
 const debtorPaymentHistoryRoutes = require("./routes/debtorPaymentHistoryRoutes");
 const orderRoutes = require("./routes/orderRoutes");
@@ -24,6 +25,7 @@ connectDB();
 
 app.use("/api/branches", branchRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/clients", clientRoutes);
 app.use("/api/debtors", debtorsRoutes);
 app.use("/api/debtor-payments", debtorPaymentHistoryRoutes);
 app.use("/api/orders", orderRoutes);

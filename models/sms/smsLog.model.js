@@ -29,10 +29,6 @@ const smsLogSchema = withBaseFields({
     type: Date,
     default: Date.now,
   },
-  isDeleted: {
-    type: Boolean,
-    default: false,
-  },
 });
 
 module.exports = mongoose.model("SmsLog", smsLogSchema);

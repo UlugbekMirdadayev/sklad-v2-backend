@@ -61,7 +61,7 @@ npm install
 3. `.env` faylini yarating va quyidagilarni yozing:
 
 ```env
-PORT=5000
+PORT=8080
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_secret_key
 ```

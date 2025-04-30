@@ -8,7 +8,6 @@ const { body, validationResult } = require("express-validator");
 // Валидация для создания/обновления долга
 const debtValidation = [
   body("client").isMongoId().withMessage("Неверный ID клиента"),
-  body("order").optional().isMongoId().withMessage("Неверный ID заказа"),
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
   body("totalDebt").isNumeric().withMessage("Сумма долга должна быть числом"),
   body("description").optional().trim(),
@@ -23,9 +22,12 @@ router.post("/", authMiddleware, debtValidation, async (req, res) => {
     }
 
     const debtor = new Debtor({
-      ...req.body,
+      client: req.body.client,
+      branch: req.body.branch,
+      totalDebt: req.body.totalDebt,
       paidAmount: 0,
       remainingDebt: req.body.totalDebt,
+      description: req.body.description || "",
       status: "pending",
     });
 
@@ -34,13 +36,17 @@ router.post("/", authMiddleware, debtValidation, async (req, res) => {
     // Обновляем долг клиента
     const client = await Client.findById(req.body.client);
     if (client) {
-      client.debt += req.body.totalDebt;
+      client.debt = (client.debt || 0) + req.body.totalDebt;
       await client.save();
     }
 
     res.status(201).json(debtor);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error creating debtor:", error);
+    res.status(500).json({
+      message: "Внутренняя ошибка сервера",
+      error: error.message,
+    });
   }
 });
 
@@ -58,8 +64,7 @@ router.get("/", authMiddleware, async (req, res) => {
     }
     if (search) {
       query.$or = [
-        { "client.firstName": { $regex: search, $options: "i" } },
-        { "client.lastName": { $regex: search, $options: "i" } },
+        { "client.name": { $regex: search, $options: "i" } },
         { "client.phone": { $regex: search, $options: "i" } },
       ];
     }
@@ -67,7 +72,6 @@ router.get("/", authMiddleware, async (req, res) => {
     const debtors = await Debtor.find(query)
       .populate("client")
       .populate("branch")
-      .populate("order")
       .sort({ createdAt: -1 });
     res.json(debtors);
   } catch (error) {
@@ -80,8 +84,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
   try {
     const debtor = await Debtor.findById(req.params.id)
       .populate("client")
-      .populate("branch")
-      .populate("order");
+      .populate("branch");
     if (!debtor) {
       return res.status(404).json({ message: "Должник не найден" });
     }
@@ -156,13 +159,20 @@ router.patch("/:id", authMiddleware, debtValidation, async (req, res) => {
       return res.status(404).json({ message: "Должник не найден" });
     }
 
+    // Обновляем только разрешенные поля
+    const allowedFields = ["client", "branch", "totalDebt", "description"];
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        debtor[field] = req.body[field];
+      }
+    }
+
     // Если меняется общая сумма долга, пересчитываем оставшуюся сумму
     if (req.body.totalDebt !== undefined) {
       const diff = req.body.totalDebt - debtor.totalDebt;
       debtor.remainingDebt = Math.max(0, debtor.remainingDebt + diff);
     }
 
-    Object.assign(debtor, req.body);
     await debtor.save();
 
     // Обновляем долг клиента

@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 const adminSchema = withBaseFields({
-  username: {
+  phone: {
     type: String,
     required: true,
     unique: true,
@@ -27,8 +27,8 @@ const adminSchema = withBaseFields({
   },
   role: {
     type: String,
-    enum: ["admin", "superadmin"],
-    default: "admin",
+    enum: ["manager", "admin", "superadmin"],
+    default: "manager",
   },
   branch: {
     type: mongoose.Schema.Types.ObjectId,

@@ -7,10 +7,7 @@ const jwt = require("jsonwebtoken");
 
 // Валидация для создания/обновления администратора
 const adminValidation = [
-  body("username")
-    .trim()
-    .notEmpty()
-    .withMessage("Имя пользователя обязательно"),
+  body("phone").trim().notEmpty().withMessage("phone обязательно"),
   body("password")
     .isLength({ min: 6 })
     .withMessage("Пароль должен быть не менее 6 символов"),
@@ -34,20 +31,20 @@ router.post("/register", authMiddleware, adminValidation, async (req, res) => {
       });
     }
 
-    const { username, password, email, fullName, branch, role } = req.body;
+    const { phone, password, email, fullName, branch, role } = req.body;
 
     // Проверка существования пользователя
     const existingAdmin = await Admin.findOne({
-      $or: [{ username }, { email }],
+      $or: [{ phone }, { email }],
     });
     if (existingAdmin) {
       return res.status(400).json({
-        message: "Пользователь с таким email или username уже существует",
+        message: "Пользователь с таким email или phone уже существует",
       });
     }
 
     const admin = new Admin({
-      username,
+      phone,
       password,
       email,
       fullName,
@@ -65,20 +62,16 @@ router.post("/register", authMiddleware, adminValidation, async (req, res) => {
 // Вход в систему
 router.post("/login", async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { phone, password } = req.body;
 
-    const admin = await Admin.findOne({ username }).populate("branch");
+    const admin = await Admin.findOne({ phone }).populate("branch");
     if (!admin) {
-      return res
-        .status(401)
-        .json({ message: "Неверное имя пользователя или пароль" });
+      return res.status(401).json({ message: "Неверное phone или пароль" });
     }
 
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
-      return res
-        .status(401)
-        .json({ message: "Неверное имя пользователя или пароль" });
+      return res.status(401).json({ message: "Неверное phone или пароль" });
     }
 
     if (!admin.isActive) {
@@ -99,7 +92,7 @@ router.post("/login", async (req, res) => {
       token,
       admin: {
         id: admin._id,
-        username: admin.username,
+        phone: admin.phone,
         email: admin.email,
         fullName: admin.fullName,
         role: admin.role,
@@ -135,6 +128,10 @@ router.patch(
       .trim()
       .notEmpty()
       .withMessage("Полное имя не может быть пустым"),
+    body("_id")
+      .exists()
+      .isMongoId()
+      .withMessage("ID обязателен и должен быть корректным Mongo ID"),
   ],
   async (req, res) => {
     try {
@@ -143,7 +140,18 @@ router.patch(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const admin = await Admin.findById(req.user.adminId);
+      const superAdmin = await Admin.findById(req.user.adminId);
+      if (!superAdmin) {
+        return res.status(404).json({ message: "Администратор не найден" });
+      }
+
+      if (superAdmin.role !== "superadmin") {
+        return res
+          .status(403)
+          .json({ message: "У вас нет прав для выполнения этого действия" });
+      }
+
+      const admin = await Admin.findById(req.body._id);
       if (!admin) {
         return res.status(404).json({ message: "Администратор не найден" });
       }
@@ -216,7 +224,7 @@ router.get("/", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: "Доступ запрещен" });
     }
 
-    const admins = await Admin.find().select("-password");
+    const admins = await Admin.find().select("-password").populate("branch");
     res.json(admins);
   } catch (error) {
     res.status(500).json({ message: error.message });

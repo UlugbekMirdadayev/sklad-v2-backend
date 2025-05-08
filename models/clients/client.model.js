@@ -23,7 +23,7 @@ const clientSchema = withBaseFields({
     required: true,
   },
   telegram: {
-    type: String, // Telegram username yoki ID (ixtiyoriy)
+    type: String,
   },
   cars: {
     type: [carSchema],

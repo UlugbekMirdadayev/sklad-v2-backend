@@ -15,6 +15,7 @@ const producRoutes = require("./routes/productRoutes");
 const batchRoutes = require("./routes/batchRoutes");
 const serviceRoutes = require("./routes/serviceRoutes");
 const smsRoutes = require("./routes/smsRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 
 // Middleware
 app.use(express.json());
@@ -33,6 +34,7 @@ app.use("/api/producs", producRoutes);
 app.use("/api/batch", batchRoutes);
 app.use("/api/service", serviceRoutes);
 app.use("/api/sms", smsRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // Handle 404 errors
 app.use((req, res) => {

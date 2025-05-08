@@ -6,8 +6,7 @@ const { body, validationResult } = require("express-validator");
 
 // Валидация для создания/обновления клиента
 const clientValidation = [
-  body("firstName").trim().notEmpty().withMessage("Имя обязательно"),
-  body("lastName").trim().notEmpty().withMessage("Фамилия обязательна"),
+  body("fullName").trim().notEmpty().withMessage("Имя обязательно"),
   body("phone").trim().notEmpty().withMessage("Телефон обязателен"),
   body("birthday").optional().isISO8601().withMessage("Неверный формат даты"),
   body("telegram").optional().trim(),
@@ -64,8 +63,7 @@ router.get("/", authMiddleware, async (req, res) => {
     }
     if (search) {
       query.$or = [
-        { firstName: { $regex: search, $options: "i" } },
-        { lastName: { $regex: search, $options: "i" } },
+        { fullName: { $regex: search, $options: "i" } },
         { phone: { $regex: search, $options: "i" } },
       ];
     }

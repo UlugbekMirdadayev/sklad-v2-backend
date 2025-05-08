@@ -7,11 +7,7 @@ const carSchema = new mongoose.Schema({
 });
 
 const clientSchema = withBaseFields({
-  firstName: {
-    type: String,
-    required: true,
-  },
-  lastName: {
+  fullName: {
     type: String,
     required: true,
   },

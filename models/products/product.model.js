@@ -7,14 +7,24 @@ const productSchema = withBaseFields({
     required: true,
     trim: true,
   },
-  category: {
-    type: String,
-    enum: ["Oil", "Filter", "SparePart", "Other"],
-    default: "Other",
+  price: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
+  quantity: {
+    type: Number,
+    required: true,
+    default: 0,
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Manager",
+    ref: "Admin",
+    required: true,
+  },
+  batch_number: {
+    type: mongoose.Schema.Types.String,
+    ref: "Batch",
     required: true,
   },
 });

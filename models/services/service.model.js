@@ -5,7 +5,6 @@ const serviceSchema = withBaseFields({
   name: {
     type: String,
     required: true,
-    unique: true, // Har bir service nomi unik bo'lishi kerak
     trim: true,
   },
   description: {
@@ -18,42 +17,27 @@ const serviceSchema = withBaseFields({
     required: true,
     min: 0,
   },
-  duration: {
-    type: Number,
-    required: false, // Masalan: 30 (daqiqa), optional
+  reCheckDate: {
+    type: Date,
   },
-  isActive: {
-    type: Boolean,
-    default: true,
+  status: {
+    type: String,
+    enum: ["booked", "done", "reject"],
+    default: "booked",
   },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
-    required: false, // Agar service faqat 1 ta filialga tegishli bo'lsa
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User", // kim yaratgan
-    required: false,
+    ref: "Admin",
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
+  client: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
   },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
-  isDeleted: {
-    type: Boolean,
-    default: false,
-  },
-});
-
-// Har doim updatedAt ni yangilab borish uchun
-serviceSchema.pre("save", function (next) {
-  this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model("Service", serviceSchema);

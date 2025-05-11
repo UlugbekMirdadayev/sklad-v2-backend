@@ -32,7 +32,7 @@ app.use("/api/debtor-payments", debtorPaymentHistoryRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/products", producRoutes);
 app.use("/api/batches", batchRoutes);
-app.use("/api/service", serviceRoutes);
+app.use("/api/services", serviceRoutes);
 app.use("/api/sms", smsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 

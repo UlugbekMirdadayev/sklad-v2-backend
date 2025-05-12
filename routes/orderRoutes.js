@@ -25,6 +25,9 @@ const orderValidation = [
     .optional()
     .isNumeric()
     .withMessage("Сумма долга должна быть числом"),
+  body("paymentType")
+    .isIn(["cash", "card", "debt"])
+    .withMessage("Неверный метод оплаты"),
   body("notes").optional().trim(),
 ];
 
@@ -149,8 +152,8 @@ router.post(
   authMiddleware,
   [
     body("amount").isNumeric().withMessage("Сумма должна быть числом"),
-    body("paymentMethod")
-      .isIn(["cash", "card", "transfer"])
+    body("paymentType")
+      .isIn(["cash", "card", "debt"])
       .withMessage("Неверный метод оплаты"),
   ],
   async (req, res) => {
@@ -222,6 +225,24 @@ router.get("/stats/summary", authMiddleware, async (req, res) => {
     ]);
 
     res.json(stats);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.delete("/:id", authMiddleware, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ message: "Заказ не найден" });
+    }
+    if (order.isDeleted) {
+      return res.status(400).json({ message: "Заказ уже удалён" });
+    }
+    order.isDeleted = true;
+    order.deletedAt = new Date();
+    await order.save();
+    res.json({ message: "Заказ успешно удалён (soft delete)", order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

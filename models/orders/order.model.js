@@ -17,8 +17,11 @@ const orderProductSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    nextOilChangeDate: {
-      type: Date, // Har bir mahsulot uchun keyingi almashtirish sanasi
+    paymentType: {
+      type: String,
+      enum: ['cash', 'card', 'debt'],
+      default: 'cash',
+      required: true,
     },
   },
   {

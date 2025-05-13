@@ -146,52 +146,6 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
   }
 });
 
-// Добавление платежа к заказу
-router.post(
-  "/:id/payments",
-  authMiddleware,
-  [
-    body("amount").isNumeric().withMessage("Сумма должна быть числом"),
-    body("paymentType")
-      .isIn(["cash", "card", "debt"])
-      .withMessage("Неверный метод оплаты"),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const order = await Order.findById(req.params.id);
-      if (!order) {
-        return res.status(404).json({ message: "Заказ не найден" });
-      }
-
-      const paymentAmount = req.body.amount;
-      const newPaidAmount = order.paidAmount + paymentAmount;
-      const newDebtAmount = Math.max(0, order.totalAmount - newPaidAmount);
-
-      order.paidAmount = newPaidAmount;
-      order.debtAmount = newDebtAmount;
-      await order.save();
-
-      // Если это VIP заказ, обновляем долг клиента
-      if (order.orderType === "vip") {
-        const client = await Client.findById(order.client);
-        if (client) {
-          client.debt = Math.max(0, client.debt - paymentAmount);
-          await client.save();
-        }
-      }
-
-      res.json(order);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
-);
-
 // Получение статистики по заказам
 router.get("/stats/summary", authMiddleware, async (req, res) => {
   try {
@@ -214,15 +168,33 @@ router.get("/stats/summary", authMiddleware, async (req, res) => {
     const stats = await Order.aggregate([
       { $match: match },
       {
-        $group: {
-          _id: "$orderType",
-          totalOrders: { $sum: 1 },
-          totalAmount: { $sum: "$totalAmount" },
-          totalPaid: { $sum: "$paidAmount" },
-          totalDebt: { $sum: "$debtAmount" },
+        $facet: {
+          byType: [
+            {
+              $group: {
+                _id: "$orderType",
+                totalOrders: { $sum: 1 },
+                totalAmount: { $sum: "$totalAmount" },
+                totalPaid: { $sum: "$paidAmount" },
+                totalDebt: { $sum: "$debtAmount" },
+              },
+            },
+          ],
+          summary: [
+            {
+              $group: {
+                _id: null,
+                totalOrders: { $sum: 1 },
+                totalAmount: { $sum: "$totalAmount" },
+                totalPaid: { $sum: "$paidAmount" },
+                totalDebt: { $sum: "$debtAmount" },
+              },
+            },
+          ],
         },
       },
     ]);
+
 
     res.json(stats);
   } catch (error) {

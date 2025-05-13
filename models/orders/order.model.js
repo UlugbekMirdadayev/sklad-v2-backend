@@ -17,16 +17,7 @@ const orderProductSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    paymentType: {
-      type: String,
-      enum: ['cash', 'card', 'debt'],
-      default: 'cash',
-      required: true,
-    },
   },
-  {
-    versionKey: false,
-  }
 );
 
 const orderSchema = withBaseFields({
@@ -64,6 +55,12 @@ const orderSchema = withBaseFields({
   notes: {
     type: String,
     default: "",
+  },
+  paymentType: {
+    type: String,
+    enum: ['cash', 'card', 'debt'],
+    default: 'cash',
+    required: true,
   },
 });
 

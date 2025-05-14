@@ -146,7 +146,7 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
   }
 });
 
-// Получение статистики по заказам
+// Получение статистики по заказам (статистика для карточек)
 router.get("/stats/summary", authMiddleware, async (req, res) => {
   try {
     const { branch, startDate, endDate } = req.query;
@@ -165,42 +165,61 @@ router.get("/stats/summary", authMiddleware, async (req, res) => {
       }
     }
 
-    const stats = await Order.aggregate([
-      { $match: match },
-      {
-        $facet: {
-          byType: [
-            {
-              $group: {
-                _id: "$orderType",
-                totalOrders: { $sum: 1 },
-                totalAmount: { $sum: "$totalAmount" },
-                totalPaid: { $sum: "$paidAmount" },
-                totalDebt: { $sum: "$debtAmount" },
-              },
-            },
-          ],
-          summary: [
-            {
-              $group: {
-                _id: null,
-                totalOrders: { $sum: 1 },
-                totalAmount: { $sum: "$totalAmount" },
-                totalPaid: { $sum: "$paidAmount" },
-                totalDebt: { $sum: "$debtAmount" },
-              },
-            },
-          ],
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const [orderStats, todayOrders, productsCount] = await Promise.all([
+      // Umumiy buyurtmalar statistikasi
+      Order.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: "$totalAmount" },
+            totalPaid: { $sum: "$paidAmount" },
+            totalDebt: { $sum: "$debtAmount" },
+          },
         },
-      },
+      ]),
+
+      // Bugungi sotuvlar
+      Order.aggregate([
+        {
+          $match: {
+            ...match,
+            createdAt: { $gte: today, $lt: tomorrow },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            todaySales: { $sum: "$paidAmount" },
+          },
+        },
+      ]),
+
+      // Mahsulotlar soni
+      Order.distinct("products.product", match).then(products => products.length),
     ]);
+
+    const stats =
+    {
+      todaySales: todayOrders[0]?.todaySales || 0,
+      totalPaid: orderStats[0]?.totalPaid || 0,
+      totalDebt: orderStats[0]?.totalDebt || 0,
+      productsCount,
+    };
 
 
     res.json(stats);
   } catch (error) {
+    console.error("Stats error:", error);
     res.status(500).json({ message: error.message });
   }
 });
+
 
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {

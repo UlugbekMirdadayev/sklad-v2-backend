@@ -40,6 +40,10 @@ const debtorSchema = withBaseFields({
     trim: true,
     default: "",
   },
+  date_returned: {
+    type: Date,
+    required: true,
+  },
   status: {
     type: String,
     enum: ["pending", "partial", "paid"],

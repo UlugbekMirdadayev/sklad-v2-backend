@@ -11,6 +11,21 @@ const debtValidation = [
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
   body("totalDebt").isNumeric().withMessage("Сумма долга должна быть числом"),
   body("description").optional().trim(),
+  body("date_returned")
+    .isISO8601()
+    .withMessage("Noto'g'ri sana formati")
+    .custom((value) => {
+      const minDate = new Date("2025-05-14 17:14:50");
+      minDate.setDate(minDate.getDate() + 7);
+      const inputDate = new Date(value);
+
+      if (inputDate < minDate) {
+        throw new Error(`Qarz qaytarish sanasi ${minDate.toISOString().split('T')[0]} dan keyin bo'lishi kerak`);
+      }
+      return true;
+    })
+    .notEmpty()
+    .withMessage("Qarz qaytarish sanasi majburiy"),
 ];
 
 // Создание новой записи о долге
@@ -27,6 +42,7 @@ router.post("/", authMiddleware, debtValidation, async (req, res) => {
       totalDebt: req.body.totalDebt,
       paidAmount: 0,
       remainingDebt: req.body.totalDebt,
+      date_returned: req.body.totalDebt,
       description: req.body.description || "",
       status: "pending",
     });
@@ -160,7 +176,7 @@ router.patch("/:id", authMiddleware, debtValidation, async (req, res) => {
     }
 
     // Обновляем только разрешенные поля
-    const allowedFields = ["client", "branch", "totalDebt", "description"];
+    const allowedFields = ["client", "branch", "totalDebt", "description", "date_returned"];
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         debtor[field] = req.body[field];

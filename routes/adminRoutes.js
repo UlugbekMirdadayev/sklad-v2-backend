@@ -66,12 +66,12 @@ router.post("/login", async (req, res) => {
 
     const admin = await Admin.findOne({ phone }).populate("branch");
     if (!admin) {
-      return res.status(401).json({ message: "Неверное phone или пароль" });
+      return res.status(400).json({ message: "Неверное phone или пароль" });
     }
 
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ message: "Неверное phone или пароль" });
+      return res.status(400).json({ message: "Неверное phone или пароль" });
     }
 
     if (!admin.isActive) {

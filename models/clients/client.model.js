@@ -50,6 +50,10 @@ const clientSchema = withBaseFields({
     type: String,
     default: "",
   },
+  password: {
+    type: String,
+    required: true,
+  },
 });
 
 module.exports = mongoose.model("Client", clientSchema);

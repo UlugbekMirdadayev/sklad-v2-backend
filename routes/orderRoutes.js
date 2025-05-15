@@ -67,7 +67,7 @@ router.get("/", authMiddleware, async (req, res) => {
   try {
     const { client, branch, orderType, startDate, endDate } = req.query;
     let query = {};
-
+    query.isDeleted = false;
     if (client) {
       query.client = client;
     }
@@ -101,7 +101,10 @@ router.get("/", authMiddleware, async (req, res) => {
 // Получение заказа по ID
 router.get("/:id", authMiddleware, async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
+    const order = await Order.findOne({
+      _id: req.params.id,
+      isDeleted: false,
+    })
       .populate("client")
       .populate("branch")
       .populate("products.product");
@@ -151,7 +154,7 @@ router.get("/stats/summary", authMiddleware, async (req, res) => {
   try {
     const { branch, startDate, endDate } = req.query;
     let match = {};
-
+    match.isDeleted = false;
     if (branch) {
       match.branch = branch;
     }

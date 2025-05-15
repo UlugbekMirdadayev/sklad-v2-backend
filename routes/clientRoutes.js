@@ -3,6 +3,8 @@ const router = express.Router();
 const Client = require("../models/clients/client.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 // Валидация для создания/обновления клиента
 const clientValidation = [
@@ -27,7 +29,53 @@ const carValidation = [
     .withMessage("Номер автомобиля обязателен"),
 ];
 
-// Создание нового клиента
+
+router.post(
+  "/login",
+  [
+    body("phone").trim().notEmpty().withMessage("Telefon raqami majburiy"),
+    body("password").notEmpty().withMessage("Parol majburiy"),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { phone, password } = req.body;
+
+    try {
+      const client = await Client.findOne({ phone });
+      if (!client) {
+        return res.status(404).json({ message: "Foydalanuvchi topilmadi" });
+      }
+
+      const isMatch = await bcrypt.compare(password, client.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: "Noto‘g‘ri parol" });
+      }
+
+      const token = jwt.sign(
+        { id: client._id, phone: client.phone },
+        process.env.JWT_SECRET,
+        { expiresIn: "7d" }
+      );
+
+      const { password: p, ...clientWithoutPassword } = client.toObject();
+      res.json({
+        message: "Tizimga muvaffaqiyatli kirildi",
+        token,
+        client: clientWithoutPassword,
+      });
+
+    } catch (err) {
+      console.error("Login xatosi:", err);
+      res.status(500).json({ message: "Serverda xatolik" });
+    }
+  }
+);
+
+
 router.post("/", authMiddleware, clientValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -35,8 +83,13 @@ router.post("/", authMiddleware, clientValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
+    const { password, ...rest } = req.body;
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const client = new Client({
-      ...req.body,
+      ...rest,
+      password: hashedPassword,
       cars: req.body.cars || [],
       debt: req.body.debt || 0,
       partialPayments: req.body.partialPayments || [],
@@ -103,6 +156,11 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
       return res.status(404).json({ message: "Клиент не найден" });
     }
 
+    // Agar parol o'zgartirilayotgan bo‘lsa, xeshlab yozing
+    if (req.body.password) {
+      req.body.password = await bcrypt.hash(req.body.password, 10);
+    }
+
     Object.assign(client, req.body);
     await client.save();
     res.json(client);
@@ -110,6 +168,7 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
 
 // Добавление автомобиля клиенту
 router.post("/:id/cars", authMiddleware, carValidation, async (req, res) => {

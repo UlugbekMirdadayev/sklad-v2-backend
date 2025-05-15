@@ -48,7 +48,7 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
     await order.save();
 
     // Если это VIP заказ с долгом, обновляем долг клиента
-    if (order.orderType === "vip" && order.debtAmount > 0) {
+    if (req.body.paymentType === "debt" && order.debtAmount > 0) {
       const client = await Client.findById(order.client);
       if (client) {
         client.debt += order.debtAmount;
@@ -128,7 +128,7 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
     }
 
     // Если меняется сумма долга, обновляем долг клиента
-    if (req.body.debtAmount !== undefined && order.orderType === "vip") {
+    if (req.body.paymentType === "debt") {
       const client = await Client.findById(order.client);
       if (client) {
         const oldDebt = order.debtAmount;
@@ -201,17 +201,17 @@ router.get("/stats/summary", authMiddleware, async (req, res) => {
       ]),
 
       // Mahsulotlar soni
-      Order.distinct("products.product", match).then(products => products.length),
+      Order.distinct("products.product", match).then(
+        (products) => products.length
+      ),
     ]);
 
-    const stats =
-    {
+    const stats = {
       todaySales: todayOrders[0]?.todaySales || 0,
       totalPaid: orderStats[0]?.totalPaid || 0,
       totalDebt: orderStats[0]?.totalDebt || 0,
       productsCount,
     };
-
 
     res.json(stats);
   } catch (error) {
@@ -219,7 +219,6 @@ router.get("/stats/summary", authMiddleware, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
 
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {

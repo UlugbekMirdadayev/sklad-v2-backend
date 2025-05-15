@@ -20,7 +20,11 @@ const debtValidation = [
       const inputDate = new Date(value);
 
       if (inputDate < minDate) {
-        throw new Error(`Qarz qaytarish sanasi ${minDate.toISOString().split('T')[0]} dan keyin bo'lishi kerak`);
+        throw new Error(
+          `Qarz qaytarish sanasi ${
+            minDate.toISOString().split("T")[0]
+          } dan keyin bo'lishi kerak`
+        );
       }
       return true;
     })
@@ -176,7 +180,13 @@ router.patch("/:id", authMiddleware, debtValidation, async (req, res) => {
     }
 
     // Обновляем только разрешенные поля
-    const allowedFields = ["client", "branch", "totalDebt", "description", "date_returned"];
+    const allowedFields = [
+      "client",
+      "branch",
+      "totalDebt",
+      "description",
+      "date_returned",
+    ];
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         debtor[field] = req.body[field];

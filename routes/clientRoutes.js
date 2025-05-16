@@ -10,6 +10,10 @@ const jwt = require("jsonwebtoken");
 const clientValidation = [
   body("fullName").trim().notEmpty().withMessage("Имя обязательно"),
   body("phone").trim().notEmpty().withMessage("Телефон обязателен"),
+  body("password")
+    .optional()
+    .notEmpty()
+    .withMessage("Пароль обязателен"),
   body("birthday").optional().isISO8601().withMessage("Неверный формат даты"),
   body("telegram").optional().trim(),
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
@@ -29,7 +33,6 @@ const carValidation = [
     .withMessage("Номер автомобиля обязателен"),
 ];
 
-
 router.post(
   "/login",
   [
@@ -41,33 +44,27 @@ router.post(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-
     const { phone, password } = req.body;
-
     try {
       const client = await Client.findOne({ phone });
-      if (!client) {
+      if (!client?.isVip) {
         return res.status(404).json({ message: "Foydalanuvchi topilmadi" });
       }
-
       const isMatch = await bcrypt.compare(password, client.password);
       if (!isMatch) {
         return res.status(400).json({ message: "Noto‘g‘ri parol" });
       }
-
       const token = jwt.sign(
         { id: client._id, phone: client.phone },
         process.env.JWT_SECRET,
         { expiresIn: "7d" }
       );
-
       const { password: p, ...clientWithoutPassword } = client.toObject();
       res.json({
         message: "Tizimga muvaffaqiyatli kirildi",
         token,
         client: clientWithoutPassword,
       });
-
     } catch (err) {
       console.error("Login xatosi:", err);
       res.status(500).json({ message: "Serverda xatolik" });
@@ -75,7 +72,7 @@ router.post(
   }
 );
 
-
+// Добавить проверку на дублирующийся телефон
 router.post("/", authMiddleware, clientValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -83,12 +80,19 @@ router.post("/", authMiddleware, clientValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { password, ...rest } = req.body;
-
+    const { password, phone, ...rest } = req.body;
+    const existing = await Client.findOne({ phone });
+    if (existing) {
+      return res.status(400).json({ message: "Клиент с таким телефоном уже существует" });
+    }
+    if (!password) {
+      return res.status(400).json({ message: "Пароль обязателен" });
+    }
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const client = new Client({
       ...rest,
+      phone,
       password: hashedPassword,
       cars: req.body.cars || [],
       debt: req.body.debt || 0,
@@ -98,7 +102,7 @@ router.post("/", authMiddleware, clientValidation, async (req, res) => {
     await client.save();
     res.status(201).json(client);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -111,8 +115,9 @@ router.get("/", authMiddleware, async (req, res) => {
     if (branch) {
       query.branch = branch;
     }
-    if (isVip !== undefined) {
-      query.isVip = isVip === "true";
+    if (typeof isVip !== "undefined") {
+      if (isVip === "true") query.isVip = true;
+      else if (isVip === "false") query.isVip = false;
     }
     if (search) {
       query.$or = [
@@ -126,7 +131,7 @@ router.get("/", authMiddleware, async (req, res) => {
       .sort({ createdAt: -1 });
     res.json(clients);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -139,7 +144,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
     }
     res.json(client);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -155,20 +160,34 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
     if (!client) {
       return res.status(404).json({ message: "Клиент не найден" });
     }
-
-    // Agar parol o'zgartirilayotgan bo‘lsa, xeshlab yozing
+    // If password is present, hash it, otherwise do not update password
     if (req.body.password) {
       req.body.password = await bcrypt.hash(req.body.password, 10);
+    } else {
+      delete req.body.password;
     }
-
-    Object.assign(client, req.body);
+    // Only allow updates to allowed fields
+    const allowedFields = [
+      "fullName",
+      "phone",
+      "password",
+      "birthday",
+      "telegram",
+      "branch",
+      "isVip",
+      "notes"
+    ];
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        client[field] = req.body[field];
+      }
+    });
     await client.save();
     res.json(client);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
-
 
 // Добавление автомобиля клиенту
 router.post("/:id/cars", authMiddleware, carValidation, async (req, res) => {
@@ -187,7 +206,7 @@ router.post("/:id/cars", authMiddleware, carValidation, async (req, res) => {
     await client.save();
     res.json(client);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -205,7 +224,7 @@ router.delete("/:id/cars/:carId", authMiddleware, async (req, res) => {
     await client.save();
     res.json(client);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -239,7 +258,7 @@ router.post(
       await client.save();
       res.json(client);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: "Server error" });
     }
   }
 );
@@ -255,7 +274,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     await client.deleteOne();
     res.json({ message: "Клиент успешно удален" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server error" });
   }
 });
 

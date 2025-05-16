@@ -14,6 +14,7 @@ const producRoutes = require("./routes/productRoutes");
 const batchRoutes = require("./routes/batchRoutes");
 const serviceRoutes = require("./routes/serviceRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const transactionRoutes = require("./routes/transactionRoutes");
 
 // Middleware
 app.use(express.json());
@@ -31,16 +32,17 @@ app.use("/api/products", producRoutes);
 app.use("/api/batches", batchRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/transactions", transactionRoutes);
 
 // Handle 404 errors
 app.use((req, res) => {
   req.path === "/privacy"
     ? res.sendFile(__dirname + "/public/privacy.html")
     : req.path === "/terms"
-    ? res.sendFile(__dirname + "/public/terms.html")
-    : req.path === "/help"
-    ? res.sendFile(__dirname + "/public/help.html")
-    : res.status(404).sendFile(__dirname + "/public/404.html");
+      ? res.sendFile(__dirname + "/public/terms.html")
+      : req.path === "/help"
+        ? res.sendFile(__dirname + "/public/help.html")
+        : res.status(404).sendFile(__dirname + "/public/404.html");
 });
 
 // Global error handler

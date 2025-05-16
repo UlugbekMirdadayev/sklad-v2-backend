@@ -14,25 +14,9 @@ const debtValidation = [
   body("date_returned")
     .isISO8601()
     .withMessage("Noto'g'ri sana formati")
-    .custom((value) => {
-      const minDate = new Date("2025-05-14 17:14:50");
-      minDate.setDate(minDate.getDate() + 7);
-      const inputDate = new Date(value);
-
-      if (inputDate < minDate) {
-        throw new Error(
-          `Qarz qaytarish sanasi ${
-            minDate.toISOString().split("T")[0]
-          } dan keyin bo'lishi kerak`
-        );
-      }
-      return true;
-    })
-    .notEmpty()
-    .withMessage("Qarz qaytarish sanasi majburiy"),
 ];
 
-// Создание новой записи о долге
+// Создание новой записи о долге или обновление существующей
 router.post("/", authMiddleware, debtValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -40,35 +24,62 @@ router.post("/", authMiddleware, debtValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const debtor = new Debtor({
-      client: req.body.client,
-      branch: req.body.branch,
-      totalDebt: req.body.totalDebt,
-      paidAmount: 0,
-      remainingDebt: req.body.totalDebt,
-      date_returned: req.body.totalDebt,
-      description: req.body.description || "",
-      status: "pending",
-    });
+    const { client: clientId, branch, totalDebt, description, date_returned } = req.body;
 
-    await debtor.save();
-
-    // Обновляем долг клиента
-    const client = await Client.findById(req.body.client);
-    if (client) {
-      client.debt = (client.debt || 0) + req.body.totalDebt;
-      await client.save();
+    // Mijozni topamiz
+    const client = await Client.findById(clientId);
+    if (!client) {
+      return res.status(404).json({ message: "Mijoz topilmadi" });
     }
 
-    res.status(201).json(debtor);
+    // Debtor mavjudmi?
+    let debtor = await Debtor.findOne({ client: clientId });
+
+    if (debtor) {
+      // Eski qarzlarni yangisiga qo‘shamiz
+      debtor.totalDebt += totalDebt;
+      debtor.remainingDebt += totalDebt;
+      debtor.description = description || debtor.description;
+      debtor.date_returned = date_returned;
+      debtor.status = "pending";
+
+      await debtor.save();
+
+      // Mijozning qarzini ham oshiramiz
+      client.debt += totalDebt;
+      await client.save();
+
+      return res.json(debtor);
+    } else {
+      // Yangi debtor yaratiladi
+      const newDebtor = new Debtor({
+        client: clientId,
+        branch,
+        totalDebt,
+        paidAmount: 0,
+        remainingDebt: totalDebt,
+        date_returned,
+        description: description || "",
+        status: "pending",
+      });
+
+      await newDebtor.save();
+
+      // Mijozning qarzi qo‘shiladi
+      client.debt += totalDebt;
+      await client.save();
+
+      return res.status(201).json(newDebtor);
+    }
   } catch (error) {
-    console.error("Error creating debtor:", error);
+    console.error("Error creating/updating debtor:", error);
     res.status(500).json({
-      message: "Внутренняя ошибка сервера",
+      message: "Server xatosi yuz berdi",
       error: error.message,
     });
   }
 });
+
 
 // Получение списка должников
 router.get("/", authMiddleware, async (req, res) => {
@@ -186,6 +197,7 @@ router.patch("/:id", authMiddleware, debtValidation, async (req, res) => {
       "totalDebt",
       "description",
       "date_returned",
+      "status"
     ];
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {

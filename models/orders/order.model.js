@@ -62,6 +62,10 @@ const orderSchema = withBaseFields({
     default: 'cash',
     required: true,
   },
+  date_returned: {
+    type: Date,
+    default: null,
+  },
 });
 
 module.exports = mongoose.model("Order", orderSchema);

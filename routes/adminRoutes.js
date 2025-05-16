@@ -4,6 +4,7 @@ const Admin = require("../models/admin/admin.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 
 // Валидация для создания/обновления администратора
 const adminValidation = [
@@ -43,9 +44,12 @@ router.post("/register", authMiddleware, adminValidation, async (req, res) => {
       });
     }
 
+    // Хеширование пароля
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const admin = new Admin({
       phone,
-      password,
+      password: hashedPassword,
       email,
       fullName,
       branch,
@@ -69,7 +73,8 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Неверное phone или пароль" });
     }
 
-    const isMatch = await admin.comparePassword(password);
+    // Проверка пароля через bcrypt
+    const isMatch = await bcrypt.compare(password, admin.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Неверное phone или пароль" });
     }
@@ -132,6 +137,10 @@ router.patch(
       .exists()
       .isMongoId()
       .withMessage("ID обязателен и должен быть корректным Mongo ID"),
+    body("password")
+      .optional()
+      .isLength({ min: 6 })
+      .withMessage("Пароль должен быть не менее 6 символов"),
   ],
   async (req, res) => {
     try {
@@ -156,7 +165,7 @@ router.patch(
         return res.status(404).json({ message: "Администратор не найден" });
       }
 
-      const { email, fullName } = req.body;
+      const { email, fullName, password } = req.body;
 
       if (email && email !== admin.email) {
         const existingAdmin = await Admin.findOne({ email });
@@ -168,6 +177,11 @@ router.patch(
 
       if (fullName) {
         admin.fullName = fullName;
+      }
+
+      // Хешируем новый пароль, если он передан
+      if (password) {
+        admin.password = await bcrypt.hash(password, 10);
       }
 
       await admin.save();
@@ -202,12 +216,14 @@ router.post(
 
       const { currentPassword, newPassword } = req.body;
 
-      const isMatch = await admin.comparePassword(currentPassword);
+      // Проверяем текущий пароль
+      const isMatch = await bcrypt.compare(currentPassword, admin.password);
       if (!isMatch) {
         return res.status(400).json({ message: "Неверный текущий пароль" });
       }
 
-      admin.password = newPassword;
+      // Хешируем новый пароль
+      admin.password = await bcrypt.hash(newPassword, 10);
       await admin.save();
 
       res.json({ message: "Пароль успешно изменен" });

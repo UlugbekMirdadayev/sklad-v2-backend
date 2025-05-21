@@ -3,6 +3,7 @@ const router = express.Router();
 const Order = require("../models/orders/order.model");
 const Debtor = require("../models/debtors/debtor.model");
 const Client = require("../models/clients/client.model");
+const Product = require("../models/products/product.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 
@@ -31,16 +32,31 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { totalAmount, paidAmount = 0, debtAmount = 0, paymentType, date_returned, client, branch } = req.body;
+    const { totalAmount, paidAmount = 0, debtAmount = 0, paymentType, date_returned, client, branch, products } = req.body;
 
     if (paidAmount + debtAmount !== totalAmount) {
       return res.status(400).json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
     }
 
+    // Проверить наличие и обновить количество продуктов
+    for (const orderProduct of products) {
+      const product = await Product.findById(orderProduct.product);
+      if (!product) {
+        return res.status(404).json({ message: `Продукт с ID ${orderProduct.product} не найден` });
+      }
+      if (product.quantity < orderProduct.quantity) {
+        return res.status(400).json({ 
+          message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${orderProduct.quantity}` 
+        });
+      }
+      product.quantity -= orderProduct.quantity;
+      await product.save();
+    }
+
     const order = new Order({ ...req.body, paidAmount, debtAmount });
     await order.save();
 
-    // Agar bu qarzli buyurtma bo‘lsa – Debtor yangilash yoki yaratish
+    // Обработка долга
     if (paymentType === "debt" && debtAmount > 0) {
       if (!date_returned) {
         return res.status(400).json({ message: "Qarz buyurtmalar uchun 'date_returned' majburiy." });
@@ -85,7 +101,6 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
 
 // GET /orders
 router.get("/", authMiddleware, async (req, res) => {
@@ -137,11 +152,39 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Заказ не найден" });
 
-    const { paidAmount = 0, debtAmount = 0, totalAmount, paymentType, date_returned } = req.body;
+    const { paidAmount = 0, debtAmount = 0, totalAmount, paymentType, date_returned, products } = req.body;
     if (paidAmount + debtAmount !== totalAmount) {
       return res.status(400).json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
     }
 
+    // Если есть изменения в продуктах
+    if (products) {
+      // Вернуть количество старых продуктов
+      for (const oldProduct of order.products) {
+        const product = await Product.findById(oldProduct.product);
+        if (product) {
+          product.quantity += oldProduct.quantity;
+          await product.save();
+        }
+      }
+
+      // Проверить и обновить количество новых продуктов
+      for (const newProduct of products) {
+        const product = await Product.findById(newProduct.product);
+        if (!product) {
+          return res.status(404).json({ message: `Продукт с ID ${newProduct.product} не найден` });
+        }
+        if (product.quantity < newProduct.quantity) {
+          return res.status(400).json({ 
+            message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${newProduct.quantity}` 
+          });
+        }
+        product.quantity -= newProduct.quantity;
+        await product.save();
+      }
+    }
+
+    // Обработка долга
     const oldDebt = order.debtAmount || 0;
     const newDebt = debtAmount;
 
@@ -197,7 +240,6 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
   }
 });
 
-
 // GET /orders/stats/summary
 router.get("/stats/summary", authMiddleware, async (req, res) => {
   try {
@@ -251,6 +293,16 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     if (!order) return res.status(404).json({ message: "Заказ не найден" });
     if (order.isDeleted) return res.status(400).json({ message: "Заказ уже удалён" });
 
+    // Вернуть количество продуктов в наличие
+    for (const orderProduct of order.products) {
+      const product = await Product.findById(orderProduct.product);
+      if (product) {
+        product.quantity += orderProduct.quantity;
+        await product.save();
+      }
+    }
+
+    // Обработка долга
     if (order.paymentType === "debt" && order.debtAmount > 0) {
       const client = await Client.findById(order.client);
       if (client) {

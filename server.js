@@ -39,10 +39,10 @@ app.use((req, res) => {
   req.path === "/privacy"
     ? res.sendFile(__dirname + "/public/privacy.html")
     : req.path === "/terms"
-      ? res.sendFile(__dirname + "/public/terms.html")
-      : req.path === "/help"
-        ? res.sendFile(__dirname + "/public/help.html")
-        : res.status(404).sendFile(__dirname + "/public/404.html");
+    ? res.sendFile(__dirname + "/public/terms.html")
+    : req.path === "/help"
+    ? res.sendFile(__dirname + "/public/help.html")
+    : res.status(404).sendFile(__dirname + "/public/404.html");
 });
 
 // Global error handler

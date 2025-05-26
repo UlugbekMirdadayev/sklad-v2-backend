@@ -33,7 +33,6 @@ router.post("/", async (req, res) => {
   const branch = new Branch({
     name: req.body.name,
     address: req.body.address,
-    phone: req.body.phone,
     isActive: req.body.isActive,
   });
 
@@ -58,9 +57,6 @@ router.patch("/:id", async (req, res) => {
     }
     if (req.body.address != null) {
       branch.address = req.body.address;
-    }
-    if (req.body.phone != null) {
-      branch.phone = req.body.phone;
     }
     if (req.body.isActive != null) {
       branch.isActive = req.body.isActive;

@@ -14,12 +14,6 @@ const branchSchema = withBaseFields({
     trim: true,
     default: "",
   },
-  phone: {
-    type: String,
-    required: false,
-    trim: true,
-    default: "",
-  },
   isActive: {
     type: Boolean,
     default: true,

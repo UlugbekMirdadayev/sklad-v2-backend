@@ -11,15 +11,9 @@ const clientSchema = withBaseFields({
     type: String,
     required: true,
   },
-  birthday: {
-    type: Date,
-  },
   phone: {
     type: String,
     required: true,
-  },
-  telegram: {
-    type: String,
   },
   cars: {
     type: [carSchema],

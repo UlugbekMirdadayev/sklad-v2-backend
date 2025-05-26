@@ -29,7 +29,7 @@ router.get("/", async (req, res) => {
       sortOrder = "desc",
     } = req.query;
 
-    const query = {};
+    const query = { isDeleted: false }; // Only show non-deleted services
     if (status) query.status = status;
     if (branch) query.branch = branch;
     if (serviceType) query.serviceType = serviceType;
@@ -46,7 +46,7 @@ router.get("/", async (req, res) => {
     res.json({
       services,
       totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total,
     });
   } catch (err) {
@@ -57,9 +57,10 @@ router.get("/", async (req, res) => {
 // READ one service by ID
 router.get("/:id", async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id).populate(
-      "branch createdBy client"
-    );
+    const service = await Service.findOne({
+      _id: req.params.id,
+      isDeleted: false,
+    }).populate("branch createdBy client");
     if (!service) return res.status(404).json({ error: "Service not found" });
     res.json(service);
   } catch (err) {
@@ -70,8 +71,8 @@ router.get("/:id", async (req, res) => {
 // UPDATE a service
 router.put("/:id", async (req, res) => {
   try {
-    const service = await Service.findByIdAndUpdate(
-      req.params.id,
+    const service = await Service.findOneAndUpdate(
+      { _id: req.params.id, isDeleted: false },
       {
         ...req.body,
       },
@@ -90,9 +91,10 @@ router.put("/:id", async (req, res) => {
 // DELETE a service (soft delete)
 router.delete("/:id", async (req, res) => {
   try {
-    const service = await Service.findByIdAndUpdate(
-      req.params.id,
+    const service = await Service.findOneAndUpdate(
+      { _id: req.params.id, isDeleted: false },
       {
+        isDeleted: true,
         isActive: false,
       },
       { new: true }
@@ -101,48 +103,6 @@ router.delete("/:id", async (req, res) => {
     res.json({ message: "Service deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-});
-
-// Add note to service
-router.post("/:id/notes", async (req, res) => {
-  try {
-    const service = await Service.findByIdAndUpdate(
-      req.params.id,
-      {
-        $push: {
-          notes: {
-            text: req.body.text,
-            createdBy: req.user._id,
-          },
-        },
-      },
-      { new: true }
-    );
-    if (!service) return res.status(404).json({ error: "Service not found" });
-    res.json(service);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// Add feedback to service
-router.post("/:id/feedback", async (req, res) => {
-  try {
-    const service = await Service.findByIdAndUpdate(
-      req.params.id,
-      {
-        feedback: {
-          rating: req.body.rating,
-          comment: req.body.comment,
-        },
-      },
-      { new: true }
-    );
-    if (!service) return res.status(404).json({ error: "Service not found" });
-    res.json(service);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
   }
 });
 

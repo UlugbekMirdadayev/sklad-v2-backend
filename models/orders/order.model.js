@@ -1,24 +1,22 @@
 const { withBaseFields } = require("../base.model");
 const mongoose = require("mongoose");
 
-const orderProductSchema = new mongoose.Schema(
-  {
-    product: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
-      required: true,
-    },
-    quantity: {
-      type: Number,
-      required: true,
-      default: 1,
-    },
-    price: {
-      type: Number,
-      required: true,
-    },
+const orderProductSchema = new mongoose.Schema({
+  product: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Product",
+    required: true,
   },
-);
+  quantity: {
+    type: Number,
+    required: true,
+    default: 1,
+  },
+  price: {
+    type: Number,
+    required: true,
+  },
+});
 
 const orderSchema = withBaseFields({
   client: {
@@ -58,13 +56,19 @@ const orderSchema = withBaseFields({
   },
   paymentType: {
     type: String,
-    enum: ['cash', 'card', 'debt'],
-    default: 'cash',
+    enum: ["cash", "card", "debt"],
+    default: "cash",
     required: true,
   },
   date_returned: {
     type: Date,
     default: null,
+  },
+  status: {
+    type: String,
+    enum: ["pending", "completed", "cancelled"],
+    default: "pending",
+    required: true,
   },
 });
 

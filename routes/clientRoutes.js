@@ -10,24 +10,25 @@ const jwt = require("jsonwebtoken");
 const clientValidation = [
   body("fullName").trim().notEmpty().withMessage("Имя обязательно"),
   body("phone").trim().notEmpty().withMessage("Телефон обязателен"),
-  body("password")
-    .optional()
-    .notEmpty()
-    .withMessage("Пароль обязателен"),
+  body("password").optional({ nullable: true }).notEmpty().withMessage("Пароль обязателен"),
   body("birthday").optional().isISO8601().withMessage("Неверный формат даты"),
-  body("telegram").optional().trim(),
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
   body("isVip")
     .optional()
     .isBoolean()
     .withMessage("isVip должен быть булевым значением"),
   body("notes").optional().trim(),
-];
-
-// Валидация для автомобиля
-const carValidation = [
-  body("model").trim().notEmpty().withMessage("Модель автомобиля обязательна"),
-  body("plateNumber")
+  body("cars")
+    .optional()
+    .isArray()
+    .withMessage("Список автомобилей должен быть массивом"),
+  body("cars.*.model")
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage("Модель автомобиля обязательна"),
+  body("cars.*.plateNumber")
+    .optional()
     .trim()
     .notEmpty()
     .withMessage("Номер автомобиля обязателен"),
@@ -83,18 +84,32 @@ router.post("/", authMiddleware, clientValidation, async (req, res) => {
     const { password, phone, ...rest } = req.body;
     const existing = await Client.findOne({ phone });
     if (existing) {
-      return res.status(400).json({ message: "Клиент с таким телефоном уже существует" });
+      return res
+        .status(400)
+        .json({ message: "Клиент с таким телефоном уже существует" });
     }
     if (!password) {
       return res.status(400).json({ message: "Пароль обязателен" });
     }
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10); // Обработка автомобилей
+    const cars = req.body.cars || [];
+    const plateNumbers = new Set();
+    for (const car of cars) {
+      const normalizedPlateNumber = car.plateNumber.toUpperCase().trim();
+      if (plateNumbers.has(normalizedPlateNumber)) {
+        return res.status(400).json({
+          message: `Дублирующийся номер автомобиля: ${normalizedPlateNumber}`,
+        });
+      }
+      plateNumbers.add(normalizedPlateNumber);
+      car.plateNumber = normalizedPlateNumber;
+    }
 
     const client = new Client({
       ...rest,
       phone,
       password: hashedPassword,
-      cars: req.body.cars || [],
+      cars,
       debt: req.body.debt || 0,
       partialPayments: req.body.partialPayments || [],
     });
@@ -160,22 +175,40 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
     if (!client) {
       return res.status(404).json({ message: "Клиент не найден" });
     }
+
     // If password is present, hash it, otherwise do not update password
     if (req.body.password) {
       req.body.password = await bcrypt.hash(req.body.password, 10);
     } else {
       delete req.body.password;
     }
+
+    // Обработка автомобилей
+    if (req.body.cars) {
+      // Валидация номеров автомобилей на уникальность
+      const plateNumbers = new Set();
+      for (const car of req.body.cars) {
+        const normalizedPlateNumber = car.plateNumber.toUpperCase().trim();
+        if (plateNumbers.has(normalizedPlateNumber)) {
+          return res.status(400).json({
+            message: `Дублирующийся номер автомобиля: ${normalizedPlateNumber}`,
+          });
+        }
+        plateNumbers.add(normalizedPlateNumber);
+        car.plateNumber = normalizedPlateNumber;
+      }
+    }
+
     // Only allow updates to allowed fields
     const allowedFields = [
       "fullName",
       "phone",
       "password",
       "birthday",
-      "telegram",
       "branch",
       "isVip",
-      "notes"
+      "notes",
+      "cars",
     ];
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
@@ -188,80 +221,6 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
-// Добавление автомобиля клиенту
-router.post("/:id/cars", authMiddleware, carValidation, async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const client = await Client.findById(req.params.id);
-    if (!client) {
-      return res.status(404).json({ message: "Клиент не найден" });
-    }
-
-    client.cars.push(req.body);
-    await client.save();
-    res.json(client);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Удаление автомобиля клиента
-router.delete("/:id/cars/:carId", authMiddleware, async (req, res) => {
-  try {
-    const client = await Client.findById(req.params.id);
-    if (!client) {
-      return res.status(404).json({ message: "Клиент не найден" });
-    }
-
-    client.cars = client.cars.filter(
-      (car) => car._id.toString() !== req.params.carId
-    );
-    await client.save();
-    res.json(client);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Добавление частичного платежа
-router.post(
-  "/:id/payments",
-  authMiddleware,
-  [
-    body("amount").isNumeric().withMessage("Сумма должна быть числом"),
-    body("date").optional().isISO8601().withMessage("Неверный формат даты"),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const client = await Client.findById(req.params.id);
-      if (!client) {
-        return res.status(404).json({ message: "Клиент не найден" });
-      }
-
-      const payment = {
-        amount: req.body.amount,
-        date: req.body.date || new Date(),
-      };
-
-      client.partialPayments.push(payment);
-      client.debt = Math.max(0, client.debt - payment.amount);
-      await client.save();
-      res.json(client);
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  }
-);
 
 // Удаление клиента
 router.delete("/:id", authMiddleware, async (req, res) => {

@@ -5,6 +5,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const Branch = require("../models/branches/branch.model");
 
 // Валидация для создания/обновления администратора
 const adminValidation = [
@@ -165,7 +166,7 @@ router.patch(
         return res.status(404).json({ message: "Администратор не найден" });
       }
 
-      const { email, fullName, password } = req.body;
+      const { email, fullName, password, branch } = req.body;
 
       if (email && email !== admin.email) {
         const existingAdmin = await Admin.findOne({ email });
@@ -177,6 +178,14 @@ router.patch(
 
       if (fullName) {
         admin.fullName = fullName;
+      }
+
+      if (branch) {
+        const existingBranch = await Branch.findById(branch);
+        if (!existingBranch) {
+          return res.status(400).json({ message: "Филиал не найден" });
+        }
+        admin.branch = branch;
       }
 
       // Хешируем новый пароль, если он передан

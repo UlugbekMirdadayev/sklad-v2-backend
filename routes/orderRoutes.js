@@ -10,32 +10,55 @@ const { body, validationResult } = require("express-validator");
 // Order validation
 const orderValidation = [
   body("client").isMongoId().withMessage("Неверный ID клиента"),
+  body("car").optional().isMongoId().withMessage("Неверный ID машины"),
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
   body("orderType").isIn(["vip", "regular"]).withMessage("Неверный тип заказа"),
   body("products").isArray().withMessage("Продукты должны быть массивом"),
   body("products.*.product").isMongoId().withMessage("Неверный ID продукта"),
-  body("products.*.quantity").isNumeric().withMessage("Количество должно быть числом"),
+  body("products.*.quantity")
+    .isNumeric()
+    .withMessage("Количество должно быть числом"),
   body("products.*.price").isNumeric().withMessage("Цена должна быть числом"),
   body("totalAmount").isNumeric().withMessage("Общая сумма должна быть числом"),
-  body("paidAmount").optional().isNumeric().withMessage("Оплаченная сумма должна быть числом"),
-  body("debtAmount").optional().isNumeric().withMessage("Сумма долга должна быть числом"),
-  body("paymentType").isIn(["cash", "card", "debt"]).withMessage("Неверный метод оплаты"),
+  body("paidAmount")
+    .optional()
+    .isNumeric()
+    .withMessage("Оплаченная сумма должна быть числом"),
+  body("debtAmount")
+    .optional()
+    .isNumeric()
+    .withMessage("Сумма долга должна быть числом"),
+  body("paymentType")
+    .isIn(["cash", "card", "debt"])
+    .withMessage("Неверный метод оплаты"),
   body("notes").optional().trim(),
-  body("date_returned").optional({ nullable: true })
+  body("date_returned")
+    .optional({ nullable: true })
     .isISO8601()
-    .withMessage("Noto'g'ri sana formati")
+    .withMessage("Noto'g'ri sana formati"),
 ];
 
 // POST /orders
 router.post("/", authMiddleware, orderValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-    const { totalAmount, paidAmount = 0, debtAmount = 0, paymentType, date_returned, client, branch, products, status = "pending" } = req.body;
+    if (!errors.isEmpty())
+      return res.status(400).json({ errors: errors.array() });    const {
+      totalAmount,
+      paidAmount = 0,
+      debtAmount = 0,
+      paymentType,
+      date_returned,
+      client: clientId,
+      branch,
+      products,
+      status = "pending",
+    } = req.body;
 
     if (paidAmount + debtAmount !== totalAmount) {
-      return res.status(400).json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
+      return res
+        .status(400)
+        .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
     }
 
     // Product quantityni faqat "completed" statusda kamaytirish
@@ -43,11 +66,13 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
       for (const orderProduct of products) {
         const product = await Product.findById(orderProduct.product);
         if (!product) {
-          return res.status(404).json({ message: `Продукт с ID ${orderProduct.product} не найден` });
+          return res.status(404).json({
+            message: `Продукт с ID ${orderProduct.product} не найден`,
+          });
         }
         if (product.quantity < orderProduct.quantity) {
           return res.status(400).json({
-            message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${orderProduct.quantity}`
+            message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${orderProduct.quantity}`,
           });
         }
         product.quantity -= orderProduct.quantity;
@@ -59,21 +84,23 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
       ...req.body,
       status,
       paidAmount,
-      debtAmount
+      debtAmount,
     });
     await order.save();
 
     // Qarzdorlikni faqat "completed" statusda mijozga qo'shish
     if (paymentType === "debt" && debtAmount > 0) {
       if (!date_returned) {
-        return res.status(400).json({ message: "Qarz buyurtmalar uchun 'date_returned' majburiy." });
+        return res.status(400).json({
+          message: "Qarz buyurtmalar uchun 'date_returned' majburiy.",
+        });
       }
 
       // Debtor record (har doim yoziladi, lekin mijozga debt faqat completed bo'lsa)
       let existingDebtor = await Debtor.findOne({
         client,
         branch,
-        status: { $ne: "paid" }
+        status: { $ne: "paid" },
       });
 
       if (existingDebtor) {
@@ -114,7 +141,8 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
 // GET /orders
 router.get("/", authMiddleware, async (req, res) => {
   try {
-    const { client, branch, orderType, startDate, endDate, date_returned } = req.query;
+    const { client, branch, orderType, startDate, endDate, date_returned } =
+      req.query;
     let query = { isDeleted: false };
     if (client) query.client = client;
     if (branch) query.branch = branch;
@@ -156,14 +184,24 @@ router.get("/:id", authMiddleware, async (req, res) => {
 router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
+    if (!errors.isEmpty())
+      return res.status(400).json({ errors: errors.array() });
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Заказ не найден" });
-
-    const { paidAmount = 0, debtAmount = 0, totalAmount, paymentType, date_returned, products, status } = req.body;
+    const {
+      paidAmount = 0,
+      debtAmount = 0,
+      totalAmount,
+      paymentType,
+      date_returned,
+      products,
+      status,
+      client: clientId,
+    } = req.body;
     if (paidAmount + debtAmount !== totalAmount) {
-      return res.status(400).json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
+      return res
+        .status(400)
+        .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
     }
 
     // Eski productlarni qaytarish agar eski status completed bo'lsa
@@ -183,11 +221,13 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
       for (const newProduct of newProducts) {
         const product = await Product.findById(newProduct.product);
         if (!product) {
-          return res.status(404).json({ message: `Продукт с ID ${newProduct.product} не найден` });
+          return res
+            .status(404)
+            .json({ message: `Продукт с ID ${newProduct.product} не найден` });
         }
         if (product.quantity < newProduct.quantity) {
           return res.status(400).json({
-            message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${newProduct.quantity}`
+            message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${newProduct.quantity}`,
           });
         }
         product.quantity -= newProduct.quantity;
@@ -233,11 +273,18 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
         debtor.remainingDebt = newDebt - debtor.paidAmount;
         debtor.description = req.body.notes || "";
         if (date_returned) debtor.date_returned = date_returned;
-        debtor.status = debtor.remainingDebt <= 0 ? "paid" : debtor.paidAmount > 0 ? "partial" : "pending";
+        debtor.status =
+          debtor.remainingDebt <= 0
+            ? "paid"
+            : debtor.paidAmount > 0
+            ? "partial"
+            : "pending";
         await debtor.save();
       } else {
         if (!date_returned) {
-          return res.status(400).json({ message: "Qarz buyurtmalar uchun 'date_returned' majburiy." });
+          return res.status(400).json({
+            message: "Qarz buyurtmalar uchun 'date_returned' majburiy.",
+          });
         }
 
         const newDebtor = new Debtor({
@@ -265,97 +312,106 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
 });
 
 // PATCH /orders/:id/status
-router.patch("/:id/status", authMiddleware, [
-  body("status").isIn(["pending", "completed", "cancelled"]).withMessage("Неверный статус заказа")
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+router.patch(
+  "/:id/status",
+  authMiddleware,
+  [
+    body("status")
+      .isIn(["pending", "completed", "cancelled"])
+      .withMessage("Неверный статус заказа"),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty())
+        return res.status(400).json({ errors: errors.array() });
 
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: "Заказ не найден" });
-    if (order.isDeleted) return res.status(400).json({ message: "Заказ удалён" });
+      const order = await Order.findById(req.params.id);
+      if (!order) return res.status(404).json({ message: "Заказ не найден" });
+      if (order.isDeleted)
+        return res.status(400).json({ message: "Заказ удалён" });
 
-    const oldStatus = order.status;
-    const { status } = req.body;
+      const oldStatus = order.status;
+      const { status } = req.body;
 
-    // cancelga o'tsa va avval completed bo'lsa product quantityni qaytarish
-    if (status === "cancelled" && oldStatus !== "cancelled") {
-      if (oldStatus === "completed") {
+      // cancelga o'tsa va avval completed bo'lsa product quantityni qaytarish
+      if (status === "cancelled" && oldStatus !== "cancelled") {
+        if (oldStatus === "completed") {
+          for (const orderProduct of order.products) {
+            const product = await Product.findById(orderProduct.product);
+            if (product) {
+              product.quantity += orderProduct.quantity;
+              await product.save();
+            }
+          }
+        }
+      }
+      // completed ga o'tsa product quantityni kamaytirish
+      else if (status === "completed" && oldStatus !== "completed") {
         for (const orderProduct of order.products) {
           const product = await Product.findById(orderProduct.product);
           if (product) {
-            product.quantity += orderProduct.quantity;
+            if (product.quantity < orderProduct.quantity) {
+              return res.status(400).json({
+                message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${orderProduct.quantity}`,
+              });
+            }
+            product.quantity -= orderProduct.quantity;
             await product.save();
           }
         }
-      }
-    }
-    // completed ga o'tsa product quantityni kamaytirish
-    else if (status === "completed" && oldStatus !== "completed") {
-      for (const orderProduct of order.products) {
-        const product = await Product.findById(orderProduct.product);
-        if (product) {
-          if (product.quantity < orderProduct.quantity) {
-            return res.status(400).json({
-              message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${orderProduct.quantity}`
-            });
+
+        // Debt faqat completedga o'tganda qo'shiladi
+        if (order.paymentType === "debt" && order.debtAmount > 0) {
+          const clientDoc = await Client.findById(order.client);
+          if (clientDoc) {
+            clientDoc.debt += order.debtAmount;
+            await clientDoc.save();
           }
-          product.quantity -= orderProduct.quantity;
-          await product.save();
         }
       }
-
-      // Debt faqat completedga o'tganda qo'shiladi
-      if (order.paymentType === "debt" && order.debtAmount > 0) {
-        const clientDoc = await Client.findById(order.client);
-        if (clientDoc) {
-          clientDoc.debt += order.debtAmount;
-          await clientDoc.save();
-        }
-      }
-    }
-    // canceldan completedga qaytsa ham kamaytirish va debt qo'shish (ya'ni completedga o'tsa har doim)
-    else if (oldStatus === "cancelled" && status === "completed") {
-      for (const orderProduct of order.products) {
-        const product = await Product.findById(orderProduct.product);
-        if (product) {
-          if (product.quantity < orderProduct.quantity) {
-            return res.status(400).json({
-              message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${orderProduct.quantity}`
-            });
+      // canceldan completedga qaytsa ham kamaytirish va debt qo'shish (ya'ni completedga o'tsa har doim)
+      else if (oldStatus === "cancelled" && status === "completed") {
+        for (const orderProduct of order.products) {
+          const product = await Product.findById(orderProduct.product);
+          if (product) {
+            if (product.quantity < orderProduct.quantity) {
+              return res.status(400).json({
+                message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${orderProduct.quantity}`,
+              });
+            }
+            product.quantity -= orderProduct.quantity;
+            await product.save();
           }
-          product.quantity -= orderProduct.quantity;
-          await product.save();
+        }
+        if (order.paymentType === "debt" && order.debtAmount > 0) {
+          const clientDoc = await Client.findById(order.client);
+          if (clientDoc) {
+            clientDoc.debt += order.debtAmount;
+            await clientDoc.save();
+          }
         }
       }
-      if (order.paymentType === "debt" && order.debtAmount > 0) {
-        const clientDoc = await Client.findById(order.client);
-        if (clientDoc) {
-          clientDoc.debt += order.debtAmount;
-          await clientDoc.save();
+      // completed dan boshqa statusga o'tsa (pending yoki cancelled) va debt bo'lsa, debtni kamaytirish
+      else if (oldStatus === "completed" && status !== "completed") {
+        if (order.paymentType === "debt" && order.debtAmount > 0) {
+          const clientDoc = await Client.findById(order.client);
+          if (clientDoc) {
+            clientDoc.debt -= order.debtAmount;
+            await clientDoc.save();
+          }
         }
       }
-    }
-    // completed dan boshqa statusga o'tsa (pending yoki cancelled) va debt bo'lsa, debtni kamaytirish
-    else if (oldStatus === "completed" && status !== "completed") {
-      if (order.paymentType === "debt" && order.debtAmount > 0) {
-        const clientDoc = await Client.findById(order.client);
-        if (clientDoc) {
-          clientDoc.debt -= order.debtAmount;
-          await clientDoc.save();
-        }
-      }
-    }
 
-    order.status = status;
-    await order.save();
+      order.status = status;
+      await order.save();
 
-    res.json(order);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+      res.json(order);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
   }
-});
+);
 
 // GET /orders/stats/summary
 router.get("/stats/summary", authMiddleware, async (req, res) => {
@@ -375,19 +431,26 @@ router.get("/stats/summary", authMiddleware, async (req, res) => {
     tomorrow.setDate(today.getDate() + 1);
 
     const [orderStats, todayOrders, productsCount] = await Promise.all([
-      Order.aggregate([{ $match: match }, {
-        $group: {
-          _id: null,
-          totalAmount: { $sum: "$totalAmount" },
-          totalPaid: { $sum: "$paidAmount" },
-          totalDebt: { $sum: "$debtAmount" },
+      Order.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: "$totalAmount" },
+            totalPaid: { $sum: "$paidAmount" },
+            totalDebt: { $sum: "$debtAmount" },
+          },
         },
-      }]),
+      ]),
 
-      Order.aggregate([{ $match: { ...match, createdAt: { $gte: today, $lt: tomorrow } } },
-      { $group: { _id: null, todaySales: { $sum: "$paidAmount" } } }]),
+      Order.aggregate([
+        { $match: { ...match, createdAt: { $gte: today, $lt: tomorrow } } },
+        { $group: { _id: null, todaySales: { $sum: "$paidAmount" } } },
+      ]),
 
-      Order.distinct("products.product", match).then((products) => products.length),
+      Order.distinct("products.product", match).then(
+        (products) => products.length
+      ),
     ]);
 
     const stats = {
@@ -408,7 +471,8 @@ router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Заказ не найден" });
-    if (order.isDeleted) return res.status(400).json({ message: "Заказ уже удалён" });
+    if (order.isDeleted)
+      return res.status(400).json({ message: "Заказ уже удалён" });
 
     // Faqat completed bo'lsa quantityni qaytarish
     if (order.status === "completed") {
@@ -422,7 +486,11 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     }
 
     // Faqat completed bo'lsa debtni kamaytirish
-    if (order.status === "completed" && order.paymentType === "debt" && order.debtAmount > 0) {
+    if (
+      order.status === "completed" &&
+      order.paymentType === "debt" &&
+      order.debtAmount > 0
+    ) {
       const client = await Client.findById(order.client);
       if (client) {
         client.debt -= order.debtAmount;

@@ -70,6 +70,10 @@ const orderSchema = withBaseFields({
     default: "pending",
     required: true,
   },
+  car: {
+    type: String,
+    default: "",
+  },
 });
 
 module.exports = mongoose.model("Order", orderSchema);

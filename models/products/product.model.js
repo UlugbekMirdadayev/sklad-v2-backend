@@ -7,7 +7,12 @@ const productSchema = withBaseFields({
     required: true,
     trim: true,
   },
-  price: {
+  costPrice: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
+  salePrice: {
     type: Number,
     required: true,
     default: 0,

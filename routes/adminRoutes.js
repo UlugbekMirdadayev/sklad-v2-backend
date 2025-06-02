@@ -4,21 +4,36 @@ const Admin = require("../models/admin/admin.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
 const Branch = require("../models/branches/branch.model");
 
-// Валидация для создания/обновления администратора
+// MongoDB error handler
+const handleMongoError = (error) => {
+  if (error.name === "MongoServerError" && error.code === 11000) {
+    return "Bunday ma'lumotli admin mavjud";
+  }
+  if (error.name === "CastError") {
+    return "Xato ID formati";
+  }
+  return error.message;
+};
+
+// Register validation
 const adminValidation = [
-  body("phone").trim().notEmpty().withMessage("phone обязательно"),
+  body("phone").trim().notEmpty().withMessage("Telefon majburiy"),
   body("password")
     .isLength({ min: 6 })
-    .withMessage("Пароль должен быть не менее 6 символов"),
-  body("email").isEmail().withMessage("Введите корректный email"),
-  body("fullName").trim().notEmpty().withMessage("Полное имя обязательно"),
-  body("branch").isMongoId().withMessage("Неверный ID филиала"),
+    .withMessage("Parol 6 ta belgidan kam bo'lmasligi kerak"),
+  body("fullName").trim().notEmpty().withMessage("To'liq ism majburiy"),
+  body("branch").isMongoId().withMessage("Branch ID xato"),
 ];
 
-// Регистрация нового администратора (только для суперадмина)
+// Login validation
+const loginValidation = [
+  body("phone").trim().notEmpty().withMessage("Telefon majburiy"),
+  body("password").notEmpty().withMessage("Parol majburiy"),
+];
+
+// Yangi admin yaratish (faqat superadmin uchun)
 router.post("/register", authMiddleware, adminValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -26,122 +41,124 @@ router.post("/register", authMiddleware, adminValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    // Проверка роли
     if (req.user.role !== "superadmin") {
       return res.status(403).json({
-        message: "Только суперадмин может создавать новых администраторов",
+        message: "Faqat superadmin admin qo'sha oladi",
       });
     }
 
-    const { phone, password, email, fullName, branch, role } = req.body;
+    const { phone, password, fullName, branch, role } = req.body;
 
-    // Проверка существования пользователя
-    const existingAdmin = await Admin.findOne({
-      $or: [{ phone }, { email }],
-    });
+    const existingAdmin = await Admin.findOne({ phone });
     if (existingAdmin) {
       return res.status(400).json({
-        message: "Пользователь с таким email или phone уже существует",
+        message: "Bunday telefon raqamli admin mavjud",
       });
     }
 
-    // Хеширование пароля
-    const hashedPassword = await bcrypt.hash(password, 10);
-
+    // Diqqat: password hash qilinmaydi! Modelning pre-save hook'i hash qiladi
     const admin = new Admin({
       phone,
-      password: hashedPassword,
-      email,
+      password,
       fullName,
       branch,
-      role: role || "admin",
+      role: ["admin", "superadmin"].includes(role) ? role : "admin",
+      isActive: true,
     });
 
     await admin.save();
-    res.status(201).json({ message: "Администратор успешно создан" });
+    res.status(201).json({ message: "Admin muvaffaqiyatli yaratildi" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: handleMongoError(error) });
   }
 });
 
-// Вход в систему
-router.post("/login", async (req, res) => {
+// Login
+router.post("/login", loginValidation, async (req, res) => {
   try {
-    const { phone, password } = req.body;
-
-    const admin = await Admin.findOne({ phone }).populate("branch");
-    if (!admin) {
-      return res.status(400).json({ message: "Неверное phone или пароль" });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    // Проверка пароля через bcrypt
-    const isMatch = await bcrypt.compare(password, admin.password);
+    const { phone, password } = req.body;
+    const admin = await Admin.findOne({ phone }).populate("branch");
+    if (!admin) {
+      return res
+        .status(404)
+        .json({ message: "Admin topilmadi (telefon xato)" });
+    }
+
+    // Model method orqali parolni solishtirish
+    const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Неверное phone или пароль" });
+      return res.status(400).json({ message: "Telefon yoki parol xato" });
     }
 
     if (!admin.isActive) {
-      return res.status(403).json({ message: "Аккаунт деактивирован" });
+      return res.status(403).json({ message: "Admin bloklangan" });
     }
 
-    // Обновляем время последнего входа
     admin.lastLogin = new Date();
     await admin.save();
 
     const token = jwt.sign(
       { adminId: admin._id, role: admin.role },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "30d" }
     );
 
     res.json({
       token,
       admin: {
         _id: admin._id,
-        phone: admin.phone,
-        email: admin.email,
         fullName: admin.fullName,
         role: admin.role,
-        branch: admin.branch,
+        branch: admin.branch
+          ? { _id: admin.branch._id, name: admin.branch.name }
+          : null,
       },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: handleMongoError(error) });
   }
 });
 
-// Получение профиля администратора
+// Admin profilini olish
 router.get("/profile", authMiddleware, async (req, res) => {
   try {
     const admin = await Admin.findById(req.user.adminId).select("-password");
     if (!admin) {
-      return res.status(404).json({ message: "Администратор не найден" });
+      return res.status(404).json({ message: "Admin topilmadi" });
     }
     res.json(admin);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: handleMongoError(error) });
   }
 });
 
-// Обновление профиля администратора
+// Admin profilini yangilash (faqat superadmin boshqa adminni o'zgartira oladi)
 router.patch(
   "/profile",
   authMiddleware,
   [
-    body("email").optional().isEmail().withMessage("Введите корректный email"),
+    body("_id")
+      .exists()
+      .isMongoId()
+      .withMessage("ID majburiy va to'g'ri bo'lishi kerak"),
     body("fullName")
       .optional()
       .trim()
       .notEmpty()
-      .withMessage("Полное имя не может быть пустым"),
-    body("_id")
-      .exists()
-      .isMongoId()
-      .withMessage("ID обязателен и должен быть корректным Mongo ID"),
+      .withMessage("To'liq ism bo'sh bo'lmasligi kerak"),
     body("password")
       .optional()
       .isLength({ min: 6 })
-      .withMessage("Пароль должен быть не менее 6 символов"),
+      .withMessage("Parol 6 ta belgidan kam bo'lmasligi kerak"),
+    body("branch")
+      .optional()
+      .isMongoId()
+      .withMessage("Branch ID xato"),
   ],
   async (req, res) => {
     try {
@@ -152,128 +169,75 @@ router.patch(
 
       const superAdmin = await Admin.findById(req.user.adminId);
       if (!superAdmin) {
-        return res.status(404).json({ message: "Администратор не найден" });
+        return res.status(404).json({ message: "Admin topilmadi" });
       }
-
       if (superAdmin.role !== "superadmin") {
         return res
           .status(403)
-          .json({ message: "У вас нет прав для выполнения этого действия" });
+          .json({ message: "Sizda bunday huquq yo'q" });
       }
 
       const admin = await Admin.findById(req.body._id);
       if (!admin) {
-        return res.status(404).json({ message: "Администратор не найден" });
+        return res.status(404).json({ message: "Admin topilmadi" });
       }
 
-      const { email, fullName, password, branch } = req.body;
-
-      if (email && email !== admin.email) {
-        const existingAdmin = await Admin.findOne({ email });
-        if (existingAdmin) {
-          return res.status(400).json({ message: "Email уже используется" });
-        }
-        admin.email = email;
-      }
+      const { fullName, password, branch } = req.body;
 
       if (fullName) {
         admin.fullName = fullName;
       }
-
       if (branch) {
         const existingBranch = await Branch.findById(branch);
         if (!existingBranch) {
-          return res.status(400).json({ message: "Филиал не найден" });
+          return res.status(400).json({ message: "Branch topilmadi" });
         }
         admin.branch = branch;
       }
-
-      // Хешируем новый пароль, если он передан
-      if (password) {
-        admin.password = await bcrypt.hash(password, 10);
+      if (typeof password === "string" && password.trim().length >= 6) {
+        admin.password = password; // Model pre-save hooki o'zi hash qiladi
       }
 
       await admin.save();
-      res.json({ message: "Профиль успешно обновлен" });
+      res.json({ message: "Profil yangilandi" });
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      res.status(500).json({ message: handleMongoError(error) });
     }
   }
 );
 
-// Смена пароля
-router.post(
-  "/change-password",
-  authMiddleware,
-  [
-    body("currentPassword").notEmpty().withMessage("Текущий пароль обязателен"),
-    body("newPassword")
-      .isLength({ min: 6 })
-      .withMessage("Новый пароль должен быть не менее 6 символов"),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-
-      const admin = await Admin.findById(req.user.adminId);
-      if (!admin) {
-        return res.status(404).json({ message: "Администратор не найден" });
-      }
-
-      const { currentPassword, newPassword } = req.body;
-
-      // Проверяем текущий пароль
-      const isMatch = await bcrypt.compare(currentPassword, admin.password);
-      if (!isMatch) {
-        return res.status(400).json({ message: "Неверный текущий пароль" });
-      }
-
-      // Хешируем новый пароль
-      admin.password = await bcrypt.hash(newPassword, 10);
-      await admin.save();
-
-      res.json({ message: "Пароль успешно изменен" });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
-);
-
-// Получение списка администраторов (только для суперадмина)
+// Barcha adminlar ro'yxati (faqat superadmin uchun)
 router.get("/", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "superadmin") {
-      return res.status(403).json({ message: "Доступ запрещен" });
+      return res.status(403).json({ message: "Ruxsat yo'q" });
     }
 
     const admins = await Admin.find().select("-password").populate("branch");
     res.json(admins);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: handleMongoError(error) });
   }
 });
 
-// Деактивация администратора (только для суперадмина)
+// Adminni bloklash (faqat superadmin uchun)
 router.patch("/:id/deactivate", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "superadmin") {
-      return res.status(403).json({ message: "Доступ запрещен" });
+      return res.status(403).json({ message: "Ruxsat yo'q" });
     }
 
     const admin = await Admin.findById(req.params.id);
     if (!admin) {
-      return res.status(404).json({ message: "Администратор не найден" });
+      return res.status(404).json({ message: "Admin topilmadi" });
     }
 
     admin.isActive = false;
     await admin.save();
 
-    res.json({ message: "Администратор успешно деактивирован" });
+    res.json({ message: "Admin bloklandi" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: handleMongoError(error) });
   }
 });
 

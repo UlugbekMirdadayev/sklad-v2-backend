@@ -10,7 +10,6 @@ const { body, validationResult } = require("express-validator");
 // Order validation
 const orderValidation = [
   body("client").isMongoId().withMessage("Неверный ID клиента"),
-  body("car").optional().isMongoId().withMessage("Неверный ID машины"),
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
   body("orderType").isIn(["vip", "regular"]).withMessage("Неверный тип заказа"),
   body("products").isArray().withMessage("Продукты должны быть массивом"),
@@ -43,7 +42,8 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty())
-      return res.status(400).json({ errors: errors.array() });    const {
+      return res.status(400).json({ errors: errors.array() });
+    const {
       totalAmount,
       paidAmount = 0,
       debtAmount = 0,
@@ -98,7 +98,7 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
 
       // Debtor record (har doim yoziladi, lekin mijozga debt faqat completed bo'lsa)
       let existingDebtor = await Debtor.findOne({
-        client,
+        client: clientId,
         branch,
         status: { $ne: "paid" },
       });
@@ -113,7 +113,7 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
         await existingDebtor.save();
       } else {
         const newDebtor = new Debtor({
-          client,
+          client: clientId,
           branch,
           order: order._id,
           totalDebt: debtAmount,

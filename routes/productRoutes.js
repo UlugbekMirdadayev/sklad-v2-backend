@@ -7,7 +7,8 @@ const { body, validationResult } = require("express-validator");
 // Validation rules for creating/updating a product
 const productValidation = [
   body("name").trim().notEmpty().withMessage("Product name is required"),
-  body("price").isNumeric().withMessage("Price must be a number"),
+  body("costPrice").isNumeric().withMessage("Cost price must be a number"),
+  body("salePrice").isNumeric().withMessage("Sale price must be a number"),
   body("quantity").isInt({ min: 0 }).withMessage("Quantity must be a non-negative integer"),
   body("createdBy").isMongoId().withMessage("Invalid creator ID"),
   body("batch_number").isString().withMessage("Invalid batch_number ID"),
@@ -32,16 +33,34 @@ router.post("/", authMiddleware, productValidation, async (req, res) => {
 
 // Get all products (with optional filters)
 router.get("/", authMiddleware, async (req, res) => {
-  try {
-    const { name, createdBy, minPrice, maxPrice, search, batch_number } = req.query;
+  try {    const { 
+      name, 
+      createdBy, 
+      minCostPrice, 
+      maxCostPrice, 
+      minSalePrice, 
+      maxSalePrice, 
+      search, 
+      batch_number 
+    } = req.query;
+    
     const query = { isDeleted: false };
     if (name) query.name = { $regex: name, $options: "i" };
     if (createdBy) query.createdBy = createdBy;
     if (batch_number) query.batch_number = batch_number;
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
+    
+    // Фильтрация по себестоимости
+    if (minCostPrice || maxCostPrice) {
+      query.costPrice = {};
+      if (minCostPrice) query.costPrice.$gte = Number(minCostPrice);
+      if (maxCostPrice) query.costPrice.$lte = Number(maxCostPrice);
+    }
+    
+    // Фильтрация по цене продажи
+    if (minSalePrice || maxSalePrice) {
+      query.salePrice = {};
+      if (minSalePrice) query.salePrice.$gte = Number(minSalePrice);
+      if (maxSalePrice) query.salePrice.$lte = Number(maxSalePrice);
     }
     if (search) {
       query.name = { $regex: search, $options: "i" };

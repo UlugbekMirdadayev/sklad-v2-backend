@@ -13,13 +13,6 @@ const adminSchema = withBaseFields({
     type: String,
     required: true,
   },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    lowercase: true,
-  },
   fullName: {
     type: String,
     required: true,

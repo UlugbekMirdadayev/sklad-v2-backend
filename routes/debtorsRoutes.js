@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const Debtor = require("../models/debtors/debtor.model");
 const Client = require("../models/clients/client.model");
-const Transaction = require("../models/transactions/transaction.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 
@@ -44,20 +43,11 @@ router.post("/", authMiddleware, debtValidation, async (req, res) => {
       debtor.date_returned = date_returned;
       debtor.status = "pending";
 
-      await debtor.save();      // Mijozning qarzini ham oshiramiz
+      await debtor.save();
+
+      // Mijozning qarzini ham oshiramiz
       client.debt += totalDebt;
       await client.save();
-
-      // Создаем запись о транзакции для нового долга
-      await Transaction.create({
-        type: "cash-out",
-        amount: totalDebt,
-        paymentType: "debt",
-        description: `Новый долг: ${client.name}`,
-        client: clientId,
-        branch,
-        createdBy: req.user.adminId
-      });
 
       return res.json(debtor);
     } else {
@@ -169,24 +159,15 @@ router.post(
 
       debtor.paidAmount = newPaidAmount;
       debtor.remainingDebt = newRemainingDebt;
-      debtor.status = newStatus;      await debtor.save();
+      debtor.status = newStatus;
+
+      await debtor.save();
 
       // Обновляем долг клиента
       const client = await Client.findById(debtor.client);
       if (client) {
         client.debt = Math.max(0, client.debt - paymentAmount);
         await client.save();
-
-        // Создаем запись о транзакции
-        await Transaction.create({
-          type: "cash-in",
-          amount: paymentAmount,
-          paymentType: "cash",
-          description: `Оплата долга: ${client.name}`,
-          client: client._id,
-          branch: debtor.branch,
-          createdBy: req.user.adminId
-        });
       }
 
       res.json(debtor);
@@ -230,25 +211,14 @@ router.patch("/:id", authMiddleware, debtValidation, async (req, res) => {
       debtor.remainingDebt = Math.max(0, debtor.remainingDebt + diff);
     }
 
-    await debtor.save();    // Обновляем долг клиента
+    await debtor.save();
+
+    // Обновляем долг клиента
     const client = await Client.findById(debtor.client);
     if (client && req.body.totalDebt !== undefined) {
       const diff = req.body.totalDebt - debtor.totalDebt;
       client.debt = Math.max(0, client.debt + diff);
       await client.save();
-
-      // Создаем запись о транзакции при изменении суммы долга
-      if (diff !== 0) {
-        await Transaction.create({
-          type: diff > 0 ? "cash-out" : "cash-in",
-          amount: Math.abs(diff),
-          paymentType: "debt",
-          description: `Изменение суммы долга: ${client.name}`,
-          client: client._id,
-          branch: debtor.branch,
-          createdBy: req.user.adminId
-        });
-      }
     }
 
     res.json(debtor);

@@ -26,7 +26,7 @@ const adminSchema = withBaseFields({
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
-    required: true,
+    required: false, // Филиал не обязателен
   },
   isActive: {
     type: Boolean,

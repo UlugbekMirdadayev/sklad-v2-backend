@@ -24,7 +24,7 @@ const adminValidation = [
     .isLength({ min: 6 })
     .withMessage("Parol 6 ta belgidan kam bo'lmasligi kerak"),
   body("fullName").trim().notEmpty().withMessage("To'liq ism majburiy"),
-  body("branch").isMongoId().withMessage("Branch ID xato"),
+  // body("branch").isMongoId().withMessage("Branch ID xato"),
 ];
 
 // Login validation
@@ -41,7 +41,7 @@ router.post("/register", authMiddleware, adminValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    if (req.user.role !== "superadmin") {
+    if (req?.user?.role !== "superadmin") {
       return res.status(403).json({
         message: "Faqat superadmin admin qo'sha oladi",
       });

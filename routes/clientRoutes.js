@@ -182,7 +182,7 @@ const clientValidation = [
   body("phone").trim().notEmpty().withMessage("Телефон обязателен"),
   body("password").optional({ nullable: true }).notEmpty().withMessage("Пароль обязателен"),
   body("birthday").optional().isISO8601().withMessage("Неверный формат даты"),
-  body("branch").isMongoId().withMessage("Неверный ID филиала"),
+  body("branch").optional().isMongoId().withMessage("Неверный ID филиала"),
   body("isVip")
     .optional()
     .isBoolean()

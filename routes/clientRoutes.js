@@ -180,7 +180,10 @@ const jwt = require("jsonwebtoken");
 const clientValidation = [
   body("fullName").trim().notEmpty().withMessage("Имя обязательно"),
   body("phone").trim().notEmpty().withMessage("Телефон обязателен"),
-  body("password").optional({ nullable: true }).notEmpty().withMessage("Пароль обязателен"),
+  body("password")
+    .optional({ nullable: true })
+    .notEmpty()
+    .withMessage("Пароль обязателен"),
   body("birthday").optional().isISO8601().withMessage("Неверный формат даты"),
   body("branch").optional().isMongoId().withMessage("Неверный ID филиала"),
   body("isVip")
@@ -244,7 +247,7 @@ router.post(
 );
 
 // Добавить проверку на дублирующийся телефон
-router.post("/", authMiddleware, clientValidation, async (req, res) => {
+router.post("/", clientValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

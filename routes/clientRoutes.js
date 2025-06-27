@@ -221,7 +221,7 @@ router.post(
     const { phone, password } = req.body;
     try {
       const client = await Client.findOne({ phone });
-      if (!client?.isVip) {
+      if (!client) {
         return res.status(404).json({ message: "Foydalanuvchi topilmadi" });
       }
       const isMatch = await bcrypt.compare(password, client.password);

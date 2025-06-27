@@ -153,7 +153,7 @@ const productValidation = [
 ];
 
 // Create a new product
-router.post("/", authMiddleware, productValidation, async (req, res) => {
+router.post("/", productValidation, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -172,7 +172,7 @@ router.post("/", authMiddleware, productValidation, async (req, res) => {
 });
 
 // Get all products (with optional filters)
-router.get("/", authMiddleware, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const {
       name,

@@ -5,6 +5,111 @@ const auth = require("../middleware/authMiddleware");
 
 router.use(auth);
 
+/**
+ * @swagger
+ * tags:
+ *   name: Branch
+ *   description: Филиалы компании
+ */
+
+/**
+ * @swagger
+ * /api/branches:
+ *   get:
+ *     summary: Получить список всех филиалов
+ *     tags: [Branch]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Список филиалов
+ */
+
+/**
+ * @swagger
+ * /api/branches/{id}:
+ *   get:
+ *     summary: Получить филиал по ID
+ *     tags: [Branch]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *     responses:
+ *       200:
+ *         description: Филиал найден
+ *       404:
+ *         description: Филиал не найден
+ */
+
+/**
+ * @swagger
+ * /api/branches:
+ *   post:
+ *     summary: Создать новый филиал
+ *     tags: [Branch]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               isActive:
+ *                 type: boolean
+ *     responses:
+ *       201:
+ *         description: Филиал создан
+ *       400:
+ *         description: Ошибка валидации
+ */
+
+/**
+ * @swagger
+ * /api/branches/{id}:
+ *   patch:
+ *     summary: Обновить филиал по ID
+ *     tags: [Branch]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               isActive:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Филиал обновлен
+ *       404:
+ *         description: Филиал не найден
+ */
+
 // Получение списка всех филиалов
 router.get("/", async (req, res) => {
   try {

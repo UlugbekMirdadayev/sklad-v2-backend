@@ -6,6 +6,176 @@ const { body, validationResult } = require("express-validator");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+/**
+ * @swagger
+ * tags:
+ *   name: Client
+ *   description: Клиенты
+ */
+
+/**
+ * @swagger
+ * /api/clients/login:
+ *   post:
+ *     summary: Вход клиента
+ *     tags: [Client]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phone:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Успешный вход
+ *       400:
+ *         description: Неверные данные
+ *       404:
+ *         description: Клиент не найден
+ */
+
+/**
+ * @swagger
+ * /api/clients:
+ *   post:
+ *     summary: Создать нового клиента
+ *     tags: [Client]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               birthday:
+ *                 type: string
+ *                 format: date
+ *               branch:
+ *                 type: string
+ *               isVip:
+ *                 type: boolean
+ *               notes:
+ *                 type: string
+ *               cars:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     model:
+ *                       type: string
+ *                     plateNumber:
+ *                       type: string
+ *     responses:
+ *       201:
+ *         description: Клиент создан
+ *       400:
+ *         description: Ошибка валидации
+ */
+
+/**
+ * @swagger
+ * /api/clients:
+ *   get:
+ *     summary: Получить список клиентов
+ *     tags: [Client]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: branch
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *       - in: query
+ *         name: isVip
+ *         schema:
+ *           type: boolean
+ *         description: Только VIP клиенты
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Поиск по имени или телефону
+ *     responses:
+ *       200:
+ *         description: Список клиентов
+ */
+
+/**
+ * @swagger
+ * /api/clients/{id}:
+ *   get:
+ *     summary: Получить клиента по ID
+ *     tags: [Client]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID клиента
+ *     responses:
+ *       200:
+ *         description: Клиент найден
+ *       404:
+ *         description: Клиент не найден
+ *   patch:
+ *     summary: Обновить клиента по ID
+ *     tags: [Client]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID клиента
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Клиент обновлен
+ *       404:
+ *         description: Клиент не найден
+ *   delete:
+ *     summary: Удалить клиента по ID
+ *     tags: [Client]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID клиента
+ *     responses:
+ *       200:
+ *         description: Клиент удален
+ *       404:
+ *         description: Клиент не найден
+ */
+
 // Валидация для создания/обновления клиента
 const clientValidation = [
   body("fullName").trim().notEmpty().withMessage("Имя обязательно"),

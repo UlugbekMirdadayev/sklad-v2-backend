@@ -118,23 +118,38 @@ const productValidation = [
   body("name").trim().notEmpty().withMessage("Product name is required"),
   body("costPrice").isNumeric().withMessage("Cost price must be a number"),
   body("salePrice").isNumeric().withMessage("Sale price must be a number"),
-  body("quantity").isInt({ min: 0 }).withMessage("Quantity must be a non-negative integer"),
+  body("quantity")
+    .isInt({ min: 0 })
+    .withMessage("Quantity must be a non-negative integer"),
   body("createdBy").isMongoId().withMessage("Invalid creator ID"),
   body("batch_number").isString().withMessage("Invalid batch_number ID"),
-  body("discount").optional().custom((value) => {
-    if (typeof value !== "object") throw new Error("Discount must be an object");
-    if (value.price !== undefined && typeof value.price !== "number") throw new Error("Discount price must be a number");
-    if (value.children && !Array.isArray(value.children)) throw new Error("Discount children must be an array");
-    if (value.children) {
-      value.children.forEach((child) => {
-        if (typeof child.quantity !== "number" || typeof child.value !== "number") {
-          throw new Error("Discount children must have numeric quantity and value");
-        }
-      });
-    }
-    return true;
-  }),
-  body("description").optional().isString().withMessage("Description must be a string"),
+  body("discount")
+    .optional()
+    .custom((value) => {
+      if (typeof value !== "object")
+        throw new Error("Discount must be an object");
+      if (value.price !== undefined && typeof value.price !== "number")
+        throw new Error("Discount price must be a number");
+      if (value.children && !Array.isArray(value.children))
+        throw new Error("Discount children must be an array");
+      if (value.children) {
+        value.children.forEach((child) => {
+          if (
+            typeof child.quantity !== "number" ||
+            typeof child.value !== "number"
+          ) {
+            throw new Error(
+              "Discount children must have numeric quantity and value"
+            );
+          }
+        });
+      }
+      return true;
+    }),
+  body("description")
+    .optional()
+    .isString()
+    .withMessage("Description must be a string"),
 ];
 
 // Create a new product
@@ -146,8 +161,10 @@ router.post("/", authMiddleware, productValidation, async (req, res) => {
   try {
     const product = new Product(req.body);
     await product.save();
-    const populatedProduct = await Product.findById(product._id)
-      .populate("createdBy", "-password");
+    const populatedProduct = await Product.findById(product._id).populate(
+      "createdBy",
+      "-password"
+    );
     res.status(201).json(populatedProduct);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -156,29 +173,30 @@ router.post("/", authMiddleware, productValidation, async (req, res) => {
 
 // Get all products (with optional filters)
 router.get("/", authMiddleware, async (req, res) => {
-  try {    const { 
-      name, 
-      createdBy, 
-      minCostPrice, 
-      maxCostPrice, 
-      minSalePrice, 
-      maxSalePrice, 
-      search, 
-      batch_number 
+  try {
+    const {
+      name,
+      createdBy,
+      minCostPrice,
+      maxCostPrice,
+      minSalePrice,
+      maxSalePrice,
+      search,
+      batch_number,
     } = req.query;
-    
+
     const query = { isDeleted: false };
     if (name) query.name = { $regex: name, $options: "i" };
     if (createdBy) query.createdBy = createdBy;
     if (batch_number) query.batch_number = batch_number;
-    
+
     // Фильтрация по себестоимости
     if (minCostPrice || maxCostPrice) {
       query.costPrice = {};
       if (minCostPrice) query.costPrice.$gte = Number(minCostPrice);
       if (maxCostPrice) query.costPrice.$lte = Number(maxCostPrice);
     }
-    
+
     // Фильтрация по цене продажи
     if (minSalePrice || maxSalePrice) {
       query.salePrice = {};
@@ -198,10 +216,12 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 // Get a product by ID
-router.get("/:id", authMiddleware, async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isDeleted: false })
-      .populate("createdBy", "-password")
+    const product = await Product.findOne({
+      _id: req.params.id,
+      isDeleted: false,
+    }).populate("createdBy", "-password");
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -218,14 +238,19 @@ router.patch("/:id", authMiddleware, productValidation, async (req, res) => {
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const product = await Product.findOne({ _id: req.params.id, isDeleted: false });
+    const product = await Product.findOne({
+      _id: req.params.id,
+      isDeleted: false,
+    });
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
     Object.assign(product, req.body);
     await product.save();
-    const populatedProduct = await Product.findById(product._id)
-      .populate("createdBy", "-password");
+    const populatedProduct = await Product.findById(product._id).populate(
+      "createdBy",
+      "-password"
+    );
     res.json(populatedProduct);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -235,7 +260,10 @@ router.patch("/:id", authMiddleware, productValidation, async (req, res) => {
 // Delete a product by ID (soft delete)
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isDeleted: false });
+    const product = await Product.findOne({
+      _id: req.params.id,
+      isDeleted: false,
+    });
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -269,7 +297,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
  */
 
 // Search products by name (quick search)
-router.get("/search/:query", authMiddleware, async (req, res) => {
+router.get("/search/:query", async (req, res) => {
   try {
     const { query } = req.params;
     const products = await Product.find({

@@ -33,6 +33,47 @@ const loginValidation = [
   body("password").notEmpty().withMessage("Parol majburiy"),
 ];
 
+/**
+ * @swagger
+ * tags:
+ *   name: Admin
+ *   description: Администраторы
+ */
+
+/**
+ * @swagger
+ * /api/admin/register:
+ *   post:
+ *     summary: Создать нового администратора
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phone:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               fullName:
+ *                 type: string
+ *               branch:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Администратор успешно создан
+ *       400:
+ *         description: Ошибка валидации
+ *       403:
+ *         description: Нет прав
+ */
+
 // Yangi admin yaratish (faqat superadmin uchun)
 router.post("/register", authMiddleware, adminValidation, async (req, res) => {
   try {
@@ -72,6 +113,30 @@ router.post("/register", authMiddleware, adminValidation, async (req, res) => {
     res.status(500).json({ message: handleMongoError(error) });
   }
 });
+
+/**
+ * @swagger
+ * /api/admin/login:
+ *   post:
+ *     summary: Вход администратора
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phone:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Успешный вход
+ *       400:
+ *         description: Неверные данные
+ */
 
 // Login
 router.post("/login", loginValidation, async (req, res) => {

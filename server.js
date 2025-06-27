@@ -5,6 +5,7 @@ const cors = require("cors");
 const http = require("http");
 const app = express();
 const server = http.createServer(app);
+const { swaggerUi, swaggerSpec } = require("./swagger");
 const branchRoutes = require("./routes/branchRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const clientRoutes = require("./routes/clientRoutes");
@@ -23,6 +24,7 @@ app.use(cors());
 // Connect to MongoDB
 connectDB();
 
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/branches", branchRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/clients", clientRoutes);

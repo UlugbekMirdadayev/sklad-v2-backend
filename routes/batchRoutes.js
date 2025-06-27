@@ -2,6 +2,35 @@ const express = require('express');
 const router = express.Router();
 const Batch = require('../models/products/batch.model');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Batch
+ *   description: Партии товаров
+ */
+
+/**
+ * @swagger
+ * /api/batches:
+ *   post:
+ *     summary: Создать новую партию
+ *     tags: [Batch]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               batch_number:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Партия создана
+ *       400:
+ *         description: Ошибка валидации
+ */
+
 // Create a new batch
 router.post('/', async (req, res) => {
   try {
@@ -17,6 +46,17 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/batches:
+ *   get:
+ *     summary: Получить список партий
+ *     tags: [Batch]
+ *     responses:
+ *       200:
+ *         description: Список партий
+ */
+
 // Get all batches (only batch_number, exclude deleted)
 router.get('/', async (req, res) => {
   try {
@@ -26,6 +66,65 @@ router.get('/', async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+/**
+ * @swagger
+ * /api/batches/{batch_number}:
+ *   get:
+ *     summary: Получить партию по номеру
+ *     tags: [Batch]
+ *     parameters:
+ *       - in: path
+ *         name: batch_number
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Номер партии
+ *     responses:
+ *       200:
+ *         description: Партия найдена
+ *       404:
+ *         description: Партия не найдена
+ *   patch:
+ *     summary: Обновить номер партии
+ *     tags: [Batch]
+ *     parameters:
+ *       - in: path
+ *         name: batch_number
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Старый номер партии
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               batch_number:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Партия обновлена
+ *       404:
+ *         description: Партия не найдена
+ *   delete:
+ *     summary: Удалить партию (soft delete)
+ *     tags: [Batch]
+ *     parameters:
+ *       - in: path
+ *         name: batch_number
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Номер партии
+ *     responses:
+ *       200:
+ *         description: Партия удалена
+ *       404:
+ *         description: Партия не найдена
+ */
 
 // Get a batch by batch_number (exclude deleted)
 router.get('/:batch_number', async (req, res) => {

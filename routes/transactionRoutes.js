@@ -192,4 +192,134 @@ router.get("/statistics/monthly-transactions", async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * tags:
+ *   name: Transaction
+ *   description: Финансовые транзакции
+ */
+
+/**
+ * @swagger
+ * /api/transactions:
+ *   get:
+ *     summary: Получить список транзакций
+ *     tags: [Transaction]
+ *     responses:
+ *       200:
+ *         description: Список транзакций
+ */
+
+/**
+ * @swagger
+ * /api/transactions/cash-in:
+ *   post:
+ *     summary: Добавить приход (cash-in)
+ *     tags: [Transaction]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               paymentType:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               branch:
+ *                 type: string
+ *               createdBy:
+ *                 type: string
+ *               client:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Приход добавлен
+ *       400:
+ *         description: Ошибка валидации
+ */
+
+/**
+ * @swagger
+ * /api/transactions/cash-out:
+ *   post:
+ *     summary: Добавить расход (cash-out)
+ *     tags: [Transaction]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               paymentType:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               branch:
+ *                 type: string
+ *               createdBy:
+ *                 type: string
+ *               client:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Расход добавлен
+ *       400:
+ *         description: Ошибка валидации
+ */
+
+/**
+ * @swagger
+ * /api/transactions/{id}:
+ *   put:
+ *     summary: Обновить транзакцию по ID
+ *     tags: [Transaction]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID транзакции
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Транзакция обновлена
+ *       404:
+ *         description: Транзакция не найдена
+ */
+
+/**
+ * @swagger
+ * /api/transactions/statistics/monthly-transactions:
+ *   get:
+ *     summary: Получить месячную статистику по транзакциям
+ *     tags: [Transaction]
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema:
+ *           type: integer
+ *         description: Год
+ *       - in: query
+ *         name: branch
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *     responses:
+ *       200:
+ *         description: Месячная статистика
+ */
+
 module.exports = router;

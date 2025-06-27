@@ -81,179 +81,182 @@ router.post("/", authMiddleware, debtValidation, async (req, res) => {
 });
 
 
-// Получение списка должников
-router.get("/", authMiddleware, async (req, res) => {
-  try {
-    const { branch, status, search } = req.query;
-    let query = {};
+/**
+ * @swagger
+ * tags:
+ *   name: Debtors
+ *   description: Управление долгами клиентов
+ */
 
-    if (branch) {
-      query.branch = branch;
-    }
-    if (status) {
-      query.status = status;
-    }
-    if (search) {
-      query.$or = [
-        { "client.name": { $regex: search, $options: "i" } },
-        { "client.phone": { $regex: search, $options: "i" } },
-      ];
-    }
+/**
+ * @swagger
+ * /api/debtors:
+ *   post:
+ *     summary: Создать или обновить долг клиента
+ *     tags: [Debtors]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               client:
+ *                 type: string
+ *               branch:
+ *                 type: string
+ *               totalDebt:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *               date_returned:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       201:
+ *         description: Долг создан
+ *       200:
+ *         description: Долг обновлен
+ *       400:
+ *         description: Ошибка валидации
+ */
 
-    const debtors = await Debtor.find(query)
-      .populate("client")
-      .populate("branch")
-      .sort({ createdAt: -1 });
-    res.json(debtors);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+/**
+ * @swagger
+ * /api/debtors:
+ *   get:
+ *     summary: Получить список должников
+ *     tags: [Debtors]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: branch
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Статус долга
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Поиск по имени или телефону клиента
+ *     responses:
+ *       200:
+ *         description: Список должников
+ */
 
-// Получение должника по ID
-router.get("/:id", authMiddleware, async (req, res) => {
-  try {
-    const debtor = await Debtor.findById(req.params.id)
-      .populate("client")
-      .populate("branch");
-    if (!debtor) {
-      return res.status(404).json({ message: "Должник не найден" });
-    }
-    res.json(debtor);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+/**
+ * @swagger
+ * /api/debtors/{id}:
+ *   get:
+ *     summary: Получить должника по ID
+ *     tags: [Debtors]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID должника
+ *     responses:
+ *       200:
+ *         description: Должник найден
+ *       404:
+ *         description: Должник не найден
+ *   patch:
+ *     summary: Обновить долг по ID
+ *     tags: [Debtors]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID должника
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               totalDebt:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *               date_returned:
+ *                 type: string
+ *                 format: date
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Долг обновлен
+ *       404:
+ *         description: Должник не найден
+ */
 
-// Добавление платежа
-router.post(
-  "/:id/payments",
-  authMiddleware,
-  [
-    body("amount").isNumeric().withMessage("Сумма должна быть числом"),
-    body("date").optional().isISO8601().withMessage("Неверный формат даты"),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+/**
+ * @swagger
+ * /api/debtors/{id}/payments:
+ *   post:
+ *     summary: Добавить платеж по долгу
+ *     tags: [Debtors]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID должника
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               date:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: Платеж добавлен
+ *       404:
+ *         description: Должник не найден
+ */
 
-      const debtor = await Debtor.findById(req.params.id);
-      if (!debtor) {
-        return res.status(404).json({ message: "Должник не найден" });
-      }
-
-      const paymentAmount = req.body.amount;
-      const newPaidAmount = debtor.paidAmount + paymentAmount;
-      const newRemainingDebt = Math.max(0, debtor.totalDebt - newPaidAmount);
-
-      // Обновляем статус
-      let newStatus = "pending";
-      if (newRemainingDebt === 0) {
-        newStatus = "paid";
-      } else if (newPaidAmount > 0) {
-        newStatus = "partial";
-      }
-
-      debtor.paidAmount = newPaidAmount;
-      debtor.remainingDebt = newRemainingDebt;
-      debtor.status = newStatus;
-
-      await debtor.save();
-
-      // Обновляем долг клиента
-      const client = await Client.findById(debtor.client);
-      if (client) {
-        client.debt = Math.max(0, client.debt - paymentAmount);
-        await client.save();
-      }
-
-      res.json(debtor);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
-);
-
-// Обновление информации о долге
-router.patch("/:id", authMiddleware, debtValidation, async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const debtor = await Debtor.findById(req.params.id);
-    if (!debtor) {
-      return res.status(404).json({ message: "Должник не найден" });
-    }
-
-    // Обновляем только разрешенные поля
-    const allowedFields = [
-      "client",
-      "branch",
-      "totalDebt",
-      "description",
-      "date_returned",
-      "status"
-    ];
-    for (const field of allowedFields) {
-      if (req.body[field] !== undefined) {
-        debtor[field] = req.body[field];
-      }
-    }
-
-    // Если меняется общая сумма долга, пересчитываем оставшуюся сумму
-    if (req.body.totalDebt !== undefined) {
-      const diff = req.body.totalDebt - debtor.totalDebt;
-      debtor.remainingDebt = Math.max(0, debtor.remainingDebt + diff);
-    }
-
-    await debtor.save();
-
-    // Обновляем долг клиента
-    const client = await Client.findById(debtor.client);
-    if (client && req.body.totalDebt !== undefined) {
-      const diff = req.body.totalDebt - debtor.totalDebt;
-      client.debt = Math.max(0, client.debt + diff);
-      await client.save();
-    }
-
-    res.json(debtor);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Получение статистики по долгам
-router.get("/stats/summary", authMiddleware, async (req, res) => {
-  try {
-    const { branch } = req.query;
-    let match = {};
-
-    if (branch) {
-      match.branch = branch;
-    }
-
-    const stats = await Debtor.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
-          totalDebt: { $sum: "$totalDebt" },
-          totalPaid: { $sum: "$paidAmount" },
-          totalRemaining: { $sum: "$remainingDebt" },
-        },
-      },
-    ]);
-
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
+/**
+ * @swagger
+ * /api/debtors/stats/summary:
+ *   get:
+ *     summary: Получить статистику по долгам
+ *     tags: [Debtors]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: branch
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *     responses:
+ *       200:
+ *         description: Статистика по долгам
+ */
 module.exports = router;

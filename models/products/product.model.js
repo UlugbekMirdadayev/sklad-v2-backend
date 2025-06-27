@@ -1,6 +1,28 @@
 const { withBaseFields } = require("../base.model");
 const mongoose = require("mongoose");
 
+const discountSchema = new mongoose.Schema(
+  {
+    price: {
+      type: Number,
+      default: 0,
+    },
+    children: [
+      {
+        quantity: {
+          type: Number,
+          required: true,
+        },
+        value: {
+          type: Number,
+          required: true,
+        },
+      },
+    ],
+  },
+  { _id: false } // prevent creating extra _id for embedded schema
+);
+
 const productSchema = withBaseFields({
   name: {
     type: String,
@@ -28,9 +50,18 @@ const productSchema = withBaseFields({
     required: true,
   },
   batch_number: {
-    type: mongoose.Schema.Types.String,
+    type: String,
     ref: "Batch",
     required: true,
+  },
+  discount: {
+    type: discountSchema,
+    default: () => ({}),
+  },
+  description: {
+    type: String,
+    trim: true,
+    default: "",
   },
 });
 

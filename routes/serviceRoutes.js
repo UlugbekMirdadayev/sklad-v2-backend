@@ -2,6 +2,125 @@ const express = require("express");
 const router = express.Router();
 const Service = require("../models/services/service.model");
 
+/**
+ * @swagger
+ * tags:
+ *   name: Service
+ *   description: Сервисные услуги
+ */
+
+/**
+ * @swagger
+ * /api/services:
+ *   post:
+ *     summary: Создать сервисную услугу
+ *     tags: [Service]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: Услуга создана
+ *       400:
+ *         description: Ошибка валидации
+ *   get:
+ *     summary: Получить список сервисных услуг
+ *     tags: [Service]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Статус услуги
+ *       - in: query
+ *         name: branch
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *       - in: query
+ *         name: serviceType
+ *         schema:
+ *           type: string
+ *         description: Тип услуги
+ *       - in: query
+ *         name: priority
+ *         schema:
+ *           type: string
+ *         description: Приоритет
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: Страница
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Лимит
+ *     responses:
+ *       200:
+ *         description: Список услуг
+ */
+
+/**
+ * @swagger
+ * /api/services/{id}:
+ *   get:
+ *     summary: Получить услугу по ID
+ *     tags: [Service]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID услуги
+ *     responses:
+ *       200:
+ *         description: Услуга найдена
+ *       404:
+ *         description: Услуга не найдена
+ *   put:
+ *     summary: Обновить услугу по ID
+ *     tags: [Service]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID услуги
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Услуга обновлена
+ *       404:
+ *         description: Услуга не найдена
+ *   delete:
+ *     summary: Удалить услугу (soft delete)
+ *     tags: [Service]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID услуги
+ *     responses:
+ *       200:
+ *         description: Услуга удалена
+ *       404:
+ *         description: Услуга не найдена
+ */
+
 // CREATE a new service
 router.post("/", async (req, res) => {
   try {

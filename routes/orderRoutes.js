@@ -37,6 +37,261 @@ const orderValidation = [
     .withMessage("Noto'g'ri sana formati"),
 ];
 
+/**
+ * @swagger
+ * tags:
+ *   name: Orders
+ *   description: Управление заказами
+ */
+
+/**
+ * @swagger
+ * /api/orders:
+ *   post:
+ *     summary: Создать заказ
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               client:
+ *                 type: string
+ *               branch:
+ *                 type: string
+ *               orderType:
+ *                 type: string
+ *                 enum: [vip, regular]
+ *               products:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     product:
+ *                       type: string
+ *                     quantity:
+ *                       type: number
+ *                     price:
+ *                       type: number
+ *               totalAmount:
+ *                 type: number
+ *               paidAmount:
+ *                 type: number
+ *               debtAmount:
+ *                 type: number
+ *               paymentType:
+ *                 type: string
+ *                 enum: [cash, card, debt]
+ *               notes:
+ *                 type: string
+ *               date_returned:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       201:
+ *         description: Заказ создан
+ *       400:
+ *         description: Ошибка валидации
+ */
+
+/**
+ * @swagger
+ * /api/orders:
+ *   get:
+ *     summary: Получить список заказов
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: client
+ *         schema:
+ *           type: string
+ *         description: ID клиента
+ *       - in: query
+ *         name: branch
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *       - in: query
+ *         name: orderType
+ *         schema:
+ *           type: string
+ *         description: Тип заказа
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Начальная дата
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Конечная дата
+ *     responses:
+ *       200:
+ *         description: Список заказов
+ */
+
+/**
+ * @swagger
+ * /api/orders/{id}:
+ *   get:
+ *     summary: Получить заказ по ID
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID заказа
+ *     responses:
+ *       200:
+ *         description: Заказ найден
+ *       404:
+ *         description: Заказ не найден
+ *   patch:
+ *     summary: Обновить заказ по ID
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID заказа
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               products:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     product:
+ *                       type: string
+ *                     quantity:
+ *                       type: number
+ *                     price:
+ *                       type: number
+ *               totalAmount:
+ *                 type: number
+ *               paidAmount:
+ *                 type: number
+ *               debtAmount:
+ *                 type: number
+ *               paymentType:
+ *                 type: string
+ *                 enum: [cash, card, debt]
+ *               notes:
+ *                 type: string
+ *               date_returned:
+ *                 type: string
+ *                 format: date
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Заказ обновлен
+ *       404:
+ *         description: Заказ не найден
+ *   delete:
+ *     summary: Удалить заказ (soft delete)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID заказа
+ *     responses:
+ *       200:
+ *         description: Заказ удален
+ *       404:
+ *         description: Заказ не найден
+ */
+
+/**
+ * @swagger
+ * /api/orders/{id}/status:
+ *   patch:
+ *     summary: Изменить статус заказа
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID заказа
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, completed, cancelled]
+ *     responses:
+ *       200:
+ *         description: Статус обновлен
+ *       404:
+ *         description: Заказ не найден
+ */
+
+/**
+ * @swagger
+ * /api/orders/stats/summary:
+ *   get:
+ *     summary: Получить статистику по заказам
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: branch
+ *         schema:
+ *           type: string
+ *         description: ID филиала
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Начальная дата
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Конечная дата
+ *     responses:
+ *       200:
+ *         description: Статистика по заказам
+ */
+
 // POST /orders
 router.post("/", authMiddleware, orderValidation, async (req, res) => {
   try {

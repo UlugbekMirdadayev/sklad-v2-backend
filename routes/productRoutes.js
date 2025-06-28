@@ -113,6 +113,53 @@ const { body, validationResult } = require("express-validator");
  *         description: Продукт не найден
  */
 
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Product:
+ *       type: object
+ *       properties:
+ *         name:
+ *           type: string
+ *           example: Масло моторное
+ *         costPrice:
+ *           type: number
+ *           example: 100000
+ *         salePrice:
+ *           type: number
+ *           example: 120000
+ *         quantity:
+ *           type: integer
+ *           example: 10
+ *         createdBy:
+ *           type: string
+ *           description: ID администратора
+ *         batch_number:
+ *           type: string
+ *           description: Номер партии
+ *         discount:
+ *           type: object
+ *           properties:
+ *             price:
+ *               type: number
+ *               example: 10000
+ *             children:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   quantity:
+ *                     type: number
+ *                     example: 5
+ *                   value:
+ *                     type: number
+ *                     example: 2000
+ *         description:
+ *           type: string
+ *           example: Описание товара
+ */
+
 // Validation rules for creating/updating a product
 const productValidation = [
   body("name").trim().notEmpty().withMessage("Product name is required"),

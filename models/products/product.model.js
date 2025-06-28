@@ -44,6 +44,16 @@ const productSchema = withBaseFields({
     required: true,
     default: 0,
   },
+  minQuantity: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
+  unit: {
+    type: String,
+    required: true,
+    trim: true,
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Admin",

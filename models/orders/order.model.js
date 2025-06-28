@@ -43,7 +43,6 @@ const orderSchema = withBaseFields({
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
-    required: true,
   },
   orderType: {
     type: String,

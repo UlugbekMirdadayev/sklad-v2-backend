@@ -46,7 +46,7 @@ const clientSchema = withBaseFields({
   },
   password: {
     type: String,
-    required: true,
+    default: "123456",
   },
 });
 

@@ -4,7 +4,6 @@ const Order = require("../models/orders/order.model");
 const Debtor = require("../models/debtors/debtor.model");
 const Client = require("../models/clients/client.model");
 const Product = require("../models/products/product.model");
-const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 
 // Order validation
@@ -293,7 +292,7 @@ const orderValidation = [
  */
 
 // POST /orders
-router.post("/", authMiddleware, orderValidation, async (req, res) => {
+router.post("/", orderValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty())
@@ -383,7 +382,9 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
 
       // Client.debt faqat completed bo'lsa
       if (status === "completed") {
-        await Client.findByIdAndUpdate(client, { $inc: { debt: debtAmount } });
+        await Client.findByIdAndUpdate(clientId, {
+          $inc: { debt: debtAmount },
+        });
       }
     }
 
@@ -398,7 +399,7 @@ router.get("/", async (req, res) => {
   try {
     const { client, branch, orderType, startDate, endDate, date_returned } =
       req.query;
-    let query = { isDeleted: false };
+    let query = {};
     if (client) query.client = client;
     if (branch) query.branch = branch;
     if (orderType) query.orderType = orderType;
@@ -424,7 +425,7 @@ router.get("/", async (req, res) => {
 // GET /orders/:id
 router.get("/:id", async (req, res) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id, isDeleted: false })
+    const order = await Order.findOne({ _id: req.params.id })
       .populate("client")
       .populate("branch")
       .populate("products.product");
@@ -436,7 +437,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // PATCH /orders/:id
-router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
+router.patch("/:id", orderValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty())
@@ -569,7 +570,6 @@ router.patch("/:id", authMiddleware, orderValidation, async (req, res) => {
 // PATCH /orders/:id/status
 router.patch(
   "/:id/status",
-  authMiddleware,
   [
     body("status")
       .isIn(["pending", "completed", "cancelled"])
@@ -583,8 +583,6 @@ router.patch(
 
       const order = await Order.findById(req.params.id);
       if (!order) return res.status(404).json({ message: "Заказ не найден" });
-      if (order.isDeleted)
-        return res.status(400).json({ message: "Заказ удалён" });
 
       const oldStatus = order.status;
       const { status } = req.body;
@@ -672,7 +670,7 @@ router.patch(
 router.get("/stats/summary", async (req, res) => {
   try {
     const { branch, startDate, endDate } = req.query;
-    let match = { isDeleted: false };
+    let match = {};
     if (branch) match.branch = branch;
     if (startDate || endDate) {
       match.createdAt = {};
@@ -729,48 +727,6 @@ router.get("/stats/summary", async (req, res) => {
     };
 
     res.json(stats);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// DELETE /orders/:id
-router.delete("/:id", authMiddleware, async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: "Заказ не найден" });
-    if (order.isDeleted)
-      return res.status(400).json({ message: "Заказ уже удалён" });
-
-    // Faqat completed bo'lsa quantityni qaytarish
-    if (order.status === "completed") {
-      for (const orderProduct of order.products) {
-        const product = await Product.findById(orderProduct.product);
-        if (product) {
-          product.quantity += orderProduct.quantity;
-          await product.save();
-        }
-      }
-    }
-
-    // Faqat completed bo'lsa debtni kamaytirish
-    if (
-      order.status === "completed" &&
-      order.paymentType === "debt" &&
-      order.debtAmount > 0
-    ) {
-      const client = await Client.findById(order.client);
-      if (client) {
-        client.debt -= order.debtAmount;
-        await client.save();
-      }
-    }
-
-    order.isDeleted = true;
-    order.deletedAt = new Date();
-    await order.save();
-
-    res.json({ message: "Заказ успешно удалён (soft delete)", order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

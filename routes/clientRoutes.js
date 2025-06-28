@@ -185,7 +185,10 @@ const clientValidation = [
     .notEmpty()
     .withMessage("Пароль обязателен"),
   body("birthday").optional().isISO8601().withMessage("Неверный формат даты"),
-  body("branch").optional().isMongoId().withMessage("Неверный ID филиала"),
+  body("branch")
+    .optional({ nullable: true })
+    .isMongoId()
+    .withMessage("Неверный ID филиала"),
   body("isVip")
     .optional()
     .isBoolean()
@@ -298,7 +301,12 @@ router.post("/", clientValidation, async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const { branch, isVip, search } = req.query;
-    let query = {};
+    let query = { isDeleted: false }; // Добавляем условие для исключения удаленных клиентов
+    if (req.query.isDeleted === "true") {
+      query.isDeleted = true; // Если isDeleted=true, то возвращаем удаленных клиентов
+    } else {
+      query.isDeleted = false; // По умолчанию исключаем удаленных клиентов
+    }
 
     if (branch) {
       query.branch = branch;
@@ -330,6 +338,11 @@ router.get("/:id", async (req, res) => {
     if (!client) {
       return res.status(404).json({ message: "Клиент не найден" });
     }
+
+    if (client.isDeleted) {
+      return res.status(400).json({ message: "Клиент уже удален" });
+    }
+
     res.json(client);
   } catch (error) {
     res.status(500).json({ message: "Server error" });
@@ -347,6 +360,10 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
     const client = await Client.findById(req.params.id);
     if (!client) {
       return res.status(404).json({ message: "Клиент не найден" });
+    }
+
+    if (client.isDeleted) {
+      return res.status(400).json({ message: "Клиент уже удален" });
     }
 
     // If password is present, hash it, otherwise do not update password
@@ -402,8 +419,13 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     if (!client) {
       return res.status(404).json({ message: "Клиент не найден" });
     }
+    if (client.isDeleted) {
+      return res.status(400).json({ message: "Клиент уже удален" });
+    }
 
-    await client.deleteOne();
+    client.isDeleted = true; // Помечаем клиента как удаленного
+    client.deletedAt = new Date(); // Устанавливаем дату удаления
+    await client.save();
     res.json({ message: "Клиент успешно удален" });
   } catch (error) {
     res.status(500).json({ message: "Server error" });

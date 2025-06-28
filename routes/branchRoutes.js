@@ -1,9 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const Branch = require("../models/branches/branch.model");
-const auth = require("../middleware/authMiddleware");
-
-router.use(auth);
 
 /**
  * @swagger

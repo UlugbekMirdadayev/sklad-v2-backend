@@ -394,7 +394,7 @@ router.post("/", authMiddleware, orderValidation, async (req, res) => {
 });
 
 // GET /orders
-router.get("/", authMiddleware, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const { client, branch, orderType, startDate, endDate, date_returned } =
       req.query;
@@ -422,7 +422,7 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 // GET /orders/:id
-router.get("/:id", authMiddleware, async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
     const order = await Order.findOne({ _id: req.params.id, isDeleted: false })
       .populate("client")
@@ -669,7 +669,7 @@ router.patch(
 );
 
 // GET /orders/stats/summary
-router.get("/stats/summary", authMiddleware, async (req, res) => {
+router.get("/stats/summary", async (req, res) => {
   try {
     const { branch, startDate, endDate } = req.query;
     let match = { isDeleted: false };

@@ -295,7 +295,7 @@ router.post("/", clientValidation, async (req, res) => {
 });
 
 // Получение списка клиентов
-router.get("/", authMiddleware, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const { branch, isVip, search } = req.query;
     let query = {};
@@ -324,7 +324,7 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 // Получение клиента по ID
-router.get("/:id", authMiddleware, async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
     const client = await Client.findById(req.params.id).populate("branch");
     if (!client) {

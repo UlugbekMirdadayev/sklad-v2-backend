@@ -220,10 +220,7 @@ router.patch(
       .optional()
       .isLength({ min: 6 })
       .withMessage("Parol 6 ta belgidan kam bo'lmasligi kerak"),
-    body("branch")
-      .optional()
-      .isMongoId()
-      .withMessage("Branch ID xato"),
+    body("branch").optional().isMongoId().withMessage("Branch ID xato"),
   ],
   async (req, res) => {
     try {
@@ -237,9 +234,7 @@ router.patch(
         return res.status(404).json({ message: "Admin topilmadi" });
       }
       if (superAdmin.role !== "superadmin") {
-        return res
-          .status(403)
-          .json({ message: "Sizda bunday huquq yo'q" });
+        return res.status(403).json({ message: "Sizda bunday huquq yo'q" });
       }
 
       const admin = await Admin.findById(req.body._id);

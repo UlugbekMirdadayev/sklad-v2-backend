@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Service = require("../models/services/service.model");
+const ServiceList = require("../models/services/servicelist.model");
 
 /**
  * @swagger
@@ -124,10 +125,28 @@ const Service = require("../models/services/service.model");
 // CREATE a new service
 router.post("/", async (req, res) => {
   try {
+    let servicesInput = req.body.services || [];
+    // Получаем все ServiceList по id
+    const serviceIds = servicesInput.map((s) => s.service);
+    const foundServices = await ServiceList.find({ _id: { $in: serviceIds } });
+    if (foundServices.length !== serviceIds.length) {
+      return res.status(400).json({ error: "Некоторые услуги не найдены в ServiceList" });
+    }
+    // Подставляем price из ServiceList, если не указан
+    servicesInput = servicesInput.map((s) => {
+      const found = foundServices.find((f) => f._id.toString() === s.service);
+      return {
+        ...s,
+        price: typeof s.price === "number" ? s.price : found.price,
+        quantity: typeof s.quantity === "number" ? s.quantity : 1,
+      };
+    });
     const service = new Service({
       ...req.body,
+      services: servicesInput,
     });
     await service.save();
+    await service.populate({ path: "services.service" });
     res.status(201).json(service);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -156,6 +175,7 @@ router.get("/", async (req, res) => {
 
     const services = await Service.find(query)
       .populate("branch createdBy client")
+      .populate("services.service")
       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
@@ -179,7 +199,9 @@ router.get("/:id", async (req, res) => {
     const service = await Service.findOne({
       _id: req.params.id,
       isDeleted: false,
-    }).populate("branch createdBy client");
+    })
+      .populate("branch createdBy client")
+      .populate("services.service");
     if (!service) return res.status(404).json({ error: "Service not found" });
     res.json(service);
   } catch (err) {

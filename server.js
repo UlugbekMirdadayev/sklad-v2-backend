@@ -14,6 +14,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const producRoutes = require("./routes/productRoutes");
 const batchRoutes = require("./routes/batchRoutes");
 const serviceRoutes = require("./routes/serviceRoutes");
+const serviceListRoutes = require("./routes/serviceListRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 
@@ -33,6 +34,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/products", producRoutes);
 app.use("/api/batches", batchRoutes);
 app.use("/api/services", serviceRoutes);
+app.use("/api/servicelist", serviceListRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/transactions", transactionRoutes);
 

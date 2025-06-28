@@ -44,6 +44,10 @@ const clientSchema = withBaseFields({
     type: String,
     default: "",
   },
+  birthday: {
+    type: Date,
+    default: null,
+  },
   password: {
     type: String,
     default: "123456",

@@ -685,34 +685,47 @@ router.get("/stats/summary", async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
 
-    const [orderStats, todayOrders, productsCount] = await Promise.all([
-      Order.aggregate([
-        { $match: match },
-        {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: "$totalAmount" },
-            totalPaid: { $sum: "$paidAmount" },
-            totalDebt: { $sum: "$debtAmount" },
-          },
-        },
-      ]),
+    // Получаем все заказы для расчета себестоимости и прибыли
+    const orders = await Order.find(match).populate("products.product");
+    let totalCost = 0;
+    let totalProfit = 0;
+    let totalAmount = 0;
+    let totalPaid = 0;
+    let totalDebt = 0;
+    for (const order of orders) {
+      totalAmount += order.totalAmount || 0;
+      totalPaid += order.paidAmount || 0;
+      totalDebt += order.debtAmount || 0;
+      for (const op of order.products) {
+        const cost = (op.product?.costPrice || 0) * (op.quantity || 0);
+        const revenue = (op.price || 0) * (op.quantity || 0);
+        totalCost += cost;
+        totalProfit += revenue - cost;
+      }
+    }
 
-      Order.aggregate([
-        { $match: { ...match, createdAt: { $gte: today, $lt: tomorrow } } },
-        { $group: { _id: null, todaySales: { $sum: "$paidAmount" } } },
-      ]),
-
-      Order.distinct("products.product", match).then(
-        (products) => products.length
-      ),
+    // Продажи за сегодня
+    const todayOrders = await Order.aggregate([
+      { $match: { ...match, createdAt: { $gte: today, $lt: tomorrow } } },
+      { $group: { _id: null, todaySales: { $sum: "$paidAmount" } } },
     ]);
+
+    // Количество уникальных продуктов
+    const productsCount = await Order.distinct("products.product", match).then(
+      (products) => products.length
+    );
+
+    // TODO: Расходы и валюты (USD/UZS) добавить после появления соответствующих данных
 
     const stats = {
       todaySales: todayOrders[0]?.todaySales || 0,
-      totalPaid: orderStats[0]?.totalPaid || 0,
-      totalDebt: orderStats[0]?.totalDebt || 0,
+      totalPaid,
+      totalDebt,
       productsCount,
+      totalCost, // Общая себестоимость
+      totalProfit, // Общая прибыль
+      // expensesUSD: 0, // добавить после появления модели расходов
+      // expensesUZS: 0, // добавить после появления модели расходов
     };
 
     res.json(stats);

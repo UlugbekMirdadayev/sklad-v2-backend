@@ -36,6 +36,7 @@ app.use("/api/services", serviceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/transactions", transactionRoutes);
 
+
 // Handle 404 errors
 app.use((req, res) => {
   req.path === "/privacy"

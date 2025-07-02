@@ -49,10 +49,21 @@ const productSchema = withBaseFields({
     required: true,
     default: 0,
   },
+  images: {
+    type: [String], // Массив URL или путей к изображениям
+    required: true,
+    validate: v => Array.isArray(v) && v.length > 0,
+  },
   unit: {
     type: String,
     required: true,
     trim: true,
+  },
+  currency: {
+    type: String,
+    enum: ["UZS", "USD"],
+    required: true,
+    default: "UZS",
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

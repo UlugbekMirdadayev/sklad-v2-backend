@@ -3,164 +3,25 @@ const router = express.Router();
 const Product = require("../models/products/product.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
-/**
- * @swagger
- * tags:
- *   name: Product
- *   description: Продукты
- */
+/** Multer config for file upload */
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = path.join(__dirname, "../public/uploads/products");
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage });
 
-/**
- * @swagger
- * /api/products:
- *   post:
- *     summary: Создать продукт
- *     tags: [Product]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Product'
- *     responses:
- *       201:
- *         description: Продукт создан
- *       400:
- *         description: Ошибка валидации
- */
-
-/**
- * @swagger
- * /api/products:
- *   get:
- *     summary: Получить список продуктов
- *     tags: [Product]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: name
- *         schema:
- *           type: string
- *         description: Поиск по имени
- *     responses:
- *       200:
- *         description: Список продуктов
- */
-
-/**
- * @swagger
- * /api/products/{id}:
- *   get:
- *     summary: Получить продукт по ID
- *     tags: [Product]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID продукта
- *     responses:
- *       200:
- *         description: Продукт найден
- *       404:
- *         description: Продукт не найден
- *   patch:
- *     summary: Обновить продукт по ID
- *     tags: [Product]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID продукта
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/Product'
- *     responses:
- *       200:
- *         description: Продукт обновлен
- *       404:
- *         description: Продукт не найден
- *   delete:
- *     summary: Удалить продукт по ID (soft delete)
- *     tags: [Product]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: ID продукта
- *     responses:
- *       200:
- *         description: Продукт удален
- *       404:
- *         description: Продукт не найден
- */
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     Product:
- *       type: object
- *       properties:
- *         name:
- *           type: string
- *           example: Масло моторное
- *         costPrice:
- *           type: number
- *           example: 100000
- *         salePrice:
- *           type: number
- *           example: 120000
- *         quantity:
- *           type: integer
- *           example: 10
- *         createdBy:
- *           type: string
- *           description: ID администратора
- *         batch_number:
- *           type: string
- *           description: Номер партии
- *         discount:
- *           type: object
- *           properties:
- *             price:
- *               type: number
- *               example: 10000
- *             children:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   quantity:
- *                     type: number
- *                     example: 5
- *                   value:
- *                     type: number
- *                     example: 2000
- *         description:
- *           type: string
- *           example: Описание товара
- */
-
-// Validation rules for creating/updating a product
+/** Product validation rules */
 const productValidation = [
   body("name").trim().notEmpty().withMessage("Product name is required"),
   body("costPrice").isNumeric().withMessage("Cost price must be a number"),
@@ -168,11 +29,19 @@ const productValidation = [
   body("quantity")
     .isInt({ min: 0 })
     .withMessage("Quantity must be a non-negative integer"),
+  body("minQuantity")
+    .isInt({ min: 0 })
+    .withMessage("Minimal quantity must be a non-negative integer"),
+  body("unit").notEmpty().withMessage("Unit is required"),
+  body("currency")
+    .isIn(["UZS", "USD"])
+    .withMessage("Currency must be UZS or USD"),
   body("createdBy").isMongoId().withMessage("Invalid creator ID"),
-  body("batch_number").isString().withMessage("Invalid batch_number ID"),
+  body("batch_number").isString().withMessage("Invalid batch number"),
   body("discount")
     .optional()
     .custom((value) => {
+      if (typeof value === "string") value = JSON.parse(value);
       if (typeof value !== "object")
         throw new Error("Discount must be an object");
       if (value.price !== undefined && typeof value.price !== "number")
@@ -199,26 +68,47 @@ const productValidation = [
     .withMessage("Description must be a string"),
 ];
 
-// Create a new product
-router.post("/", productValidation, async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  try {
-    const product = new Product(req.body);
-    await product.save();
-    const populatedProduct = await Product.findById(product._id).populate(
-      "createdBy",
-      "-password"
-    );
-    res.status(201).json(populatedProduct);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+/** Create product with images */
+router.post(
+  "/",
+  authMiddleware,
+  upload.array("images", 10),
+  productValidation,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      if (req.files) {
+        await Promise.all(req.files.map((f) => fs.promises.unlink(f.path)));
+      }
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-// Get all products (with optional filters)
+    try {
+      let images = [];
+      if (req.files && req.files.length > 0) {
+        images = req.files.map((file) => "/uploads/products/" + file.filename);
+      } else if (Array.isArray(req.body.images)) {
+        images = req.body.images;
+      }
+
+      if (typeof req.body.discount === "string") {
+        req.body.discount = JSON.parse(req.body.discount);
+      }
+
+      const product = new Product({ ...req.body, images });
+      await product.save();
+      const populatedProduct = await Product.findById(product._id).populate(
+        "createdBy",
+        "-password"
+      );
+      res.status(201).json(populatedProduct);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+/** Get all products */
 router.get("/", async (req, res) => {
   try {
     const {
@@ -236,23 +126,18 @@ router.get("/", async (req, res) => {
     if (name) query.name = { $regex: name, $options: "i" };
     if (createdBy) query.createdBy = createdBy;
     if (batch_number) query.batch_number = batch_number;
-
-    // Фильтрация по себестоимости
     if (minCostPrice || maxCostPrice) {
       query.costPrice = {};
       if (minCostPrice) query.costPrice.$gte = Number(minCostPrice);
       if (maxCostPrice) query.costPrice.$lte = Number(maxCostPrice);
     }
-
-    // Фильтрация по цене продажи
     if (minSalePrice || maxSalePrice) {
       query.salePrice = {};
       if (minSalePrice) query.salePrice.$gte = Number(minSalePrice);
       if (maxSalePrice) query.salePrice.$lte = Number(maxSalePrice);
     }
-    if (search) {
-      query.name = { $regex: search, $options: "i" };
-    }
+    if (search) query.name = { $regex: search, $options: "i" };
+
     const products = await Product.find(query)
       .populate("createdBy", "-password")
       .sort({ createdAt: -1 });
@@ -262,58 +147,77 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Get a product by ID
+/** Get product by ID */
 router.get("/:id", async (req, res) => {
   try {
     const product = await Product.findOne({
       _id: req.params.id,
       isDeleted: false,
     }).populate("createdBy", "-password");
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
     res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Update a product by ID
-router.patch("/:id", authMiddleware, productValidation, async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  try {
-    const product = await Product.findOne({
-      _id: req.params.id,
-      isDeleted: false,
-    });
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
+/** Update product by ID */
+// PATCH: update product with images support
+router.patch(
+  "/:id",
+  authMiddleware,
+  upload.array("images", 10),
+  productValidation,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      if (req.files) {
+        await Promise.all(req.files.map((f) => fs.promises.unlink(f.path)));
+      }
+      return res.status(400).json({ errors: errors.array() });
     }
-    Object.assign(product, req.body);
-    await product.save();
-    const populatedProduct = await Product.findById(product._id).populate(
-      "createdBy",
-      "-password"
-    );
-    res.json(populatedProduct);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+    try {
+      const product = await Product.findOne({
+        _id: req.params.id,
+        isDeleted: false,
+      });
+      if (!product) return res.status(404).json({ message: "Product not found" });
 
-// Delete a product by ID (soft delete)
+      // Handle images
+      let images = product.images || [];
+      if (req.files && req.files.length > 0) {
+        // Optionally, you can remove old images from disk here
+        images = req.files.map((file) => "/uploads/products/" + file.filename);
+      } else if (Array.isArray(req.body.images)) {
+        images = req.body.images;
+      }
+
+      // Handle discount if sent as string
+      if (typeof req.body.discount === "string") {
+        req.body.discount = JSON.parse(req.body.discount);
+      }
+
+      Object.assign(product, req.body, { images });
+      await product.save();
+      const populatedProduct = await Product.findById(product._id).populate(
+        "createdBy",
+        "-password"
+      );
+      res.json(populatedProduct);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+/** Soft delete product by ID */
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const product = await Product.findOne({
       _id: req.params.id,
       isDeleted: false,
     });
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
     product.isDeleted = true;
     product.deletedAt = new Date();
     await product.save();
@@ -323,27 +227,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-/**
- * @swagger
- * /api/products/search/{query}:
- *   get:
- *     summary: Быстрый поиск продуктов по имени
- *     tags: [Product]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: query
- *         required: true
- *         schema:
- *           type: string
- *         description: Поисковый запрос
- *     responses:
- *       200:
- *         description: Список продуктов
- */
-
-// Search products by name (quick search)
+/** Quick search products by name */
 router.get("/search/:query", async (req, res) => {
   try {
     const { query } = req.params;

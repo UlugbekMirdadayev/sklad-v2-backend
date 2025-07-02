@@ -21,6 +21,8 @@ const transactionRoutes = require("./routes/transactionRoutes");
 // Middleware
 app.use(express.json());
 app.use(cors());
+// Statik rasm va fayllar uchun
+app.use("/uploads", express.static(__dirname + "/public/uploads"));
 
 // Connect to MongoDB
 connectDB();

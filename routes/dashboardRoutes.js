@@ -88,6 +88,7 @@ const router = express.Router();
 const Order = require("../models/orders/order.model");
 const Product = require("../models/products/product.model");
 const Service = require("../models/services/service.model");
+const Client = require("../models/clients/client.model");
 
 // Универсальный роут для dashboard
 router.get("/summary", async (req, res) => {
@@ -100,30 +101,18 @@ router.get("/summary", async (req, res) => {
 
     const [
       todayServicesCount,
-      todayIncomeAgg,
       stockCount,
       lowStockProducts,
-      // 2. Charts
       weeklyIncome,
       servicesByType,
-      // 3. Latest services
       latestServicesDocs,
-      // 4. Top used products
       topProductsAgg,
+      todayIncomeAgg,
     ] = await Promise.all([
       Service.countDocuments({ createdAt: { $gte: today, $lt: tomorrow } }),
-      Order.aggregate([
-        {
-          $match: {
-            createdAt: { $gte: today, $lt: tomorrow },
-            isDeleted: false,
-          },
-        },
-        { $group: { _id: null, total: { $sum: "$paidAmount" } } },
-      ]),
       Product.countDocuments({ quantity: { $gt: 0 } }),
       Product.find({ quantity: { $lt: 5 } }).select("name quantity"),
-      // Weekly income
+      // Weekly income by currency
       (async () => {
         const now = new Date();
         now.setHours(0, 0, 0, 0);
@@ -138,6 +127,7 @@ router.get("/summary", async (req, res) => {
           const start = days[i];
           const end = new Date(start);
           end.setDate(start.getDate() + 1);
+          // Группируем по валюте
           const orders = await Order.aggregate([
             {
               $match: {
@@ -145,9 +135,30 @@ router.get("/summary", async (req, res) => {
                 isDeleted: false,
               },
             },
-            { $group: { _id: null, total: { $sum: "$paidAmount" } } },
+            { $unwind: "$products" },
+            {
+              $lookup: {
+                from: "products",
+                localField: "products.product",
+                foreignField: "_id",
+                as: "productInfo",
+              },
+            },
+            { $unwind: "$productInfo" },
+            {
+              $group: {
+                _id: "$productInfo.currency",
+                total: { $sum: { $multiply: ["$products.price", "$products.quantity"] } },
+              },
+            },
           ]);
-          result.push({ date: start, total: orders[0]?.total || 0 });
+          // Формируем результат по валютам
+          let uzs = 0, usd = 0;
+          for (const o of orders) {
+            if (o._id === "UZS") uzs = o.total;
+            if (o._id === "USD") usd = o.total;
+          }
+          result.push({ date: start, uzs, usd });
         }
         return result;
       })(),
@@ -184,25 +195,91 @@ router.get("/summary", async (req, res) => {
         { $unwind: "$product" },
         { $project: { _id: 0, name: "$product.name", used: 1 } },
       ]),
+      // Today income by currency
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: today, $lt: tomorrow },
+            isDeleted: false,
+          },
+        },
+        { $unwind: "$products" },
+        {
+          $lookup: {
+            from: "products",
+            localField: "products.product",
+            foreignField: "_id",
+            as: "productInfo",
+          },
+        },
+        { $unwind: "$productInfo" },
+        {
+          $group: {
+            _id: "$productInfo.currency",
+            total: { $sum: { $multiply: ["$products.price", "$products.quantity"] } },
+          },
+        },
+      ]),
     ]);
 
-    // productCapital: сумма всех (costPrice * quantity) по складу
+
+    // productCapital: сумма всех (costPrice * quantity) по складу, отдельно по валютам
     const productCapitalAgg = await Product.aggregate([
       {
         $group: {
-          _id: null,
+          _id: "$currency",
           capital: { $sum: { $multiply: ["$costPrice", "$quantity"] } },
         },
       },
     ]);
-    const productCapital = productCapitalAgg[0]?.capital || 0;
+    let productCapital = { uzs: 0, usd: 0 };
+    for (const row of productCapitalAgg) {
+      if (row._id === "UZS") productCapital.uzs = row.capital;
+      if (row._id === "USD") productCapital.usd = row.capital;
+    }
+
+
+    // Общий профит (foyda) и оборот по валютам
+    const allOrders = await Order.find({ isDeleted: false }).populate("products.product");
+    let totalProfit = { uzs: 0, usd: 0 };
+    let totalSales = { uzs: 0, usd: 0 };
+    for (const order of allOrders) {
+      for (const op of order.products) {
+        const currency = op.product?.currency || "UZS";
+        const cost = (op.product?.costPrice || 0) * (op.quantity || 0);
+        const revenue = (op.price || 0) * (op.quantity || 0);
+        if (currency === "UZS") {
+          totalProfit.uzs += revenue - cost;
+          totalSales.uzs += revenue;
+        } else if (currency === "USD") {
+          totalProfit.usd += revenue - cost;
+          totalSales.usd += revenue;
+        }
+      }
+    }
+
+    // Количество новых клиентов за сегодня
+    const newClientsCount = await Client.countDocuments({ createdAt: { $gte: today, $lt: tomorrow } });
+    // Общее количество клиентов
+    const totalClientsCount = await Client.countDocuments({});
+
+    // Today income by currency
+    let todayIncome = { uzs: 0, usd: 0 };
+    for (const row of todayIncomeAgg) {
+      if (row._id === "UZS") todayIncome.uzs = row.total;
+      if (row._id === "USD") todayIncome.usd = row.total;
+    }
 
     const topCards = {
       todayServicesCount,
-      todayIncome: todayIncomeAgg[0]?.total || 0,
+      todayIncome,
       stockCount,
       lowStockProducts,
       productCapital,
+      totalProfit,
+      totalSales,
+      newClientsCount,
+      totalClientsCount,
     };
 
     const charts = {

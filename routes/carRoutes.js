@@ -1,21 +1,21 @@
 const express = require("express");
 const router = express.Router();
-const Avtomobil = require("../models/avtomobil/avtomobil.model");
+const Car = require("../models/car/car.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 
 /**
  * @swagger
  * tags:
- *   name: Avtomobil
- *   description: CRUD for avtomobil (car)
+ *   name: Car
+ *   description: CRUD for car
  */
 
 /**
  * @swagger
  * components:
  *   schemas:
- *     Avtomobil:
+ *     Car:
  *       type: object
  *       required:
  *         - name
@@ -53,7 +53,7 @@ const avtomobilValidation = [
 
 /**
  * @swagger
- * /api/avtomobils:
+ * /api/cars:
  *   post:
  *     summary: Create avtomobil
  *     tags: [Avtomobil]
@@ -78,13 +78,13 @@ const avtomobilValidation = [
 router.post("/", authMiddleware, async (req, res) => {
   try {
     if (!req.body.name) {
-      return res.status(400).json({ message: "Avtomobil name is required" });
+      return res.status(400).json({ message: "Car name is required" });
     }
-    const avtomobil = new Avtomobil({
+    const car = new Car({
       name: req.body.name,
     });
-    await avtomobil.save();
-    const obj = avtomobil.toObject();
+    await car.save();
+    const obj = car.toObject();
     delete obj.__v;
     res.status(201).json(obj);
   } catch (e) {
@@ -94,7 +94,7 @@ router.post("/", authMiddleware, async (req, res) => {
 
 /**
  * @swagger
- * /api/avtomobils:
+ * /api/cars:
  *   get:
  *     summary: Get all avtomobils
  *     tags: [Avtomobil]
@@ -112,8 +112,8 @@ router.post("/", authMiddleware, async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const avtomobils = await Avtomobil.find().select("-__v");
-    res.json(avtomobils);
+    const cars = await Car.find().select("-__v");
+    res.json(cars);
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
@@ -121,7 +121,7 @@ router.get("/", async (req, res) => {
 
 /**
  * @swagger
- * /api/avtomobils/{id}:
+ * /api/cars/{id}:
  *   get:
  *     summary: Get avtomobil by ID
  *     tags: [Avtomobil]
@@ -146,9 +146,9 @@ router.get("/", async (req, res) => {
  */
 router.get("/:id", authMiddleware, async (req, res) => {
   try {
-    const avtomobil = await Avtomobil.findById(req.params.id).populate("createdBy", "name");
-    if (!avtomobil) return res.status(404).json({ message: "Not found" });
-    res.json(avtomobil);
+    const car = await Car.findById(req.params.id).populate("createdBy", "name");
+    if (!car) return res.status(404).json({ message: "Not found" });
+    res.json(car);
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
@@ -156,7 +156,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
 
 /**
  * @swagger
- * /api/avtomobils/{id}:
+ * /api/cars/{id}:
  *   patch:
  *     summary: Update avtomobil by ID
  *     tags: [Avtomobil]
@@ -191,13 +191,13 @@ router.patch(":id", authMiddleware, avtomobilValidation, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
-    const avtomobil = await Avtomobil.findById(req.params.id);
-    if (!avtomobil) return res.status(404).json({ message: "Not found" });
+    const car = await Car.findById(req.params.id);
+    if (!car) return res.status(404).json({ message: "Not found" });
     // createdBy, createdAt, updatedAt должны игнорироваться при обновлении
     const { name } = req.body;
-    if (name !== undefined) avtomobil.name = name;
-    await avtomobil.save();
-    res.json(avtomobil);
+    if (name !== undefined) car.name = name;
+    await car.save();
+    res.json(car);
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
@@ -205,7 +205,7 @@ router.patch(":id", authMiddleware, avtomobilValidation, async (req, res) => {
 
 /**
  * @swagger
- * /api/avtomobils/{id}:
+ * /api/cars/{id}:
  *   delete:
  *     summary: Delete avtomobil by ID
  *     tags: [Avtomobil]
@@ -226,9 +226,9 @@ router.patch(":id", authMiddleware, avtomobilValidation, async (req, res) => {
  */
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
-    const avtomobil = await Avtomobil.findById(req.params.id);
-    if (!avtomobil) return res.status(404).json({ message: "Not found" });
-    await avtomobil.deleteOne();
+    const car = await Car.findById(req.params.id);
+    if (!car) return res.status(404).json({ message: "Not found" });
+    await car.deleteOne();
     res.json({ message: "Deleted" });
   } catch (e) {
     res.status(500).json({ message: e.message });

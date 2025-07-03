@@ -37,8 +37,8 @@ const orderSchema = withBaseFields({
     uzs: { type: Number, required: true, default: 0 },
   },
   debtAmount: {
-    type: Number,
-    default: 0, // Agar VIP mijoz qarz olsa
+    usd: { type: Number, required: true, default: 0 },
+    uzs: { type: Number, required: true, default: 0 },
   },
   branch: {
     type: mongoose.Schema.Types.ObjectId,

@@ -30,8 +30,11 @@ const orderValidation = [
       return true;
     }),
   body("debtAmount")
-    .isNumeric()
-    .withMessage("Сумма долга должна быть числом"),
+    .custom((value) => {
+      if (!value || typeof value !== "object") throw new Error("debtAmount должен быть объектом {usd, uzs}");
+      if (typeof value.usd !== "number" || typeof value.uzs !== "number") throw new Error("debtAmount.usd и debtAmount.uzs должны быть числами");
+      return true;
+    }),
   body("paymentType")
     .isIn(["cash", "card", "debt"])
     .withMessage("Неверный метод оплаты"),
@@ -316,12 +319,13 @@ router.post("/", orderValidation, async (req, res) => {
     } = req.body;
 
     // Проверка суммы по валютам
-    const paidSum = (paidAmount.usd || 0) + (paidAmount.uzs || 0);
-    const debtSum = (debtAmount.usd || 0) + (debtAmount.uzs || 0);
-    if (paidSum + debtSum !== totalAmount) {
+    if (
+      paidAmount.usd + debtAmount.usd !== totalAmount.usd ||
+      paidAmount.uzs + debtAmount.uzs !== totalAmount.uzs
+    ) {
       return res
         .status(400)
-        .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
+        .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total (по валютам)" });
     }
 
     // Product quantityni faqat "completed" statusda kamaytirish

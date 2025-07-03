@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const { withBaseFields } = require("../base.model");
 
-const avtomobilSchema = withBaseFields(
+const carSchema = withBaseFields(
   {
     name: {
       type: String,
@@ -11,4 +11,4 @@ const avtomobilSchema = withBaseFields(
   },
 );
 
-module.exports = mongoose.model("Avtomobil", avtomobilSchema);
+module.exports = mongoose.model("Car", carSchema);

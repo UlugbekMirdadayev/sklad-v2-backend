@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const Avtomobil = require("../models/avtomobil.model");
+const Avtomobil = require("../models/avtomobil/avtomobil.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 
@@ -47,7 +47,7 @@ const avtomobilValidation = [
     .trim()
     .notEmpty()
     .withMessage("Car number is required")
-    .matches(/^[0-9]{2}[A-Z]{1,3}[0-9]{2,3}$/i)
+    .matches(/^[0-9]{2}[A-Z]{1}[0-9]{3}[A-Z]{2}$/i)
     .withMessage("Invalid Uzbek car number format"),
 ];
 
@@ -75,13 +75,18 @@ const avtomobilValidation = [
  *       400:
  *         description: Validation error
  */
-router.post("/", authMiddleware, avtomobilValidation, async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+router.post("/", authMiddleware, async (req, res) => {
   try {
-    const avtomobil = new Avtomobil({ ...req.body, createdBy: req.user.id });
+    if (!req.body.name) {
+      return res.status(400).json({ message: "Avtomobil name is required" });
+    }
+    const avtomobil = new Avtomobil({
+      name: req.body.name,
+    });
     await avtomobil.save();
-    res.status(201).json(avtomobil);
+    const obj = avtomobil.toObject();
+    delete obj.__v;
+    res.status(201).json(obj);
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
@@ -105,9 +110,9 @@ router.post("/", authMiddleware, avtomobilValidation, async (req, res) => {
  *               items:
  *                 $ref: '#/components/schemas/Avtomobil'
  */
-router.get("/", authMiddleware, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const avtomobils = await Avtomobil.find().populate("createdBy", "name");
+    const avtomobils = await Avtomobil.find().select("-__v");
     res.json(avtomobils);
   } catch (e) {
     res.status(500).json({ message: e.message });
@@ -182,13 +187,15 @@ router.get("/:id", authMiddleware, async (req, res) => {
  *       404:
  *         description: Not found
  */
-router.patch("/:id", authMiddleware, avtomobilValidation, async (req, res) => {
+router.patch(":id", authMiddleware, avtomobilValidation, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
     const avtomobil = await Avtomobil.findById(req.params.id);
     if (!avtomobil) return res.status(404).json({ message: "Not found" });
-    Object.assign(avtomobil, req.body);
+    // createdBy, createdAt, updatedAt должны игнорироваться при обновлении
+    const { name } = req.body;
+    if (name !== undefined) avtomobil.name = name;
     await avtomobil.save();
     res.json(avtomobil);
   } catch (e) {

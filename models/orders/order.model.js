@@ -29,12 +29,12 @@ const orderSchema = withBaseFields({
     required: true,
   },
   totalAmount: {
-    type: Number,
-    required: true,
+    usd: { type: Number, required: true, default: 0 },
+    uzs: { type: Number, required: true, default: 0 },
   },
   paidAmount: {
-    type: Number,
-    default: 0, // VIP mijozlar uchun qisman to'lovni ko'rsatadi
+    usd: { type: Number, required: true, default: 0 },
+    uzs: { type: Number, required: true, default: 0 },
   },
   debtAmount: {
     type: Number,

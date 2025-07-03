@@ -17,13 +17,19 @@ const orderValidation = [
     .isNumeric()
     .withMessage("Количество должно быть числом"),
   body("products.*.price").isNumeric().withMessage("Цена должна быть числом"),
-  body("totalAmount").isNumeric().withMessage("Общая сумма должна быть числом"),
+  body("totalAmount")
+    .custom((value) => {
+      if (!value || typeof value !== "object") throw new Error("totalAmount должен быть объектом {usd, uzs}");
+      if (typeof value.usd !== "number" || typeof value.uzs !== "number") throw new Error("totalAmount.usd и totalAmount.uzs должны быть числами");
+      return true;
+    }),
   body("paidAmount")
-    .optional()
-    .isNumeric()
-    .withMessage("Оплаченная сумма должна быть числом"),
+    .custom((value) => {
+      if (!value || typeof value !== "object") throw new Error("paidAmount должен быть объектом {usd, uzs}");
+      if (typeof value.usd !== "number" || typeof value.uzs !== "number") throw new Error("paidAmount.usd и paidAmount.uzs должны быть числами");
+      return true;
+    }),
   body("debtAmount")
-    .optional()
     .isNumeric()
     .withMessage("Сумма долга должна быть числом"),
   body("paymentType")
@@ -299,8 +305,8 @@ router.post("/", orderValidation, async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     const {
       totalAmount,
-      paidAmount = 0,
-      debtAmount = 0,
+      paidAmount = { usd: 0, uzs: 0 },
+      debtAmount = { usd: 0, uzs: 0 },
       paymentType,
       date_returned,
       client: clientId,
@@ -309,7 +315,10 @@ router.post("/", orderValidation, async (req, res) => {
       status = "pending",
     } = req.body;
 
-    if (paidAmount + debtAmount !== totalAmount) {
+    // Проверка суммы по валютам
+    const paidSum = (paidAmount.usd || 0) + (paidAmount.uzs || 0);
+    const debtSum = (debtAmount.usd || 0) + (debtAmount.uzs || 0);
+    if (paidSum + debtSum !== totalAmount) {
       return res
         .status(400)
         .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
@@ -343,7 +352,8 @@ router.post("/", orderValidation, async (req, res) => {
     await order.save();
 
     // Qarzdorlikni faqat "completed" statusda mijozga qo'shish
-    if (paymentType === "debt" && debtAmount > 0) {
+    const debtTotal = (debtAmount.usd || 0) + (debtAmount.uzs || 0);
+    if (paymentType === "debt" && debtTotal > 0) {
       if (!date_returned) {
         return res.status(400).json({
           message: "Qarz buyurtmalar uchun 'date_returned' majburiy.",
@@ -358,9 +368,15 @@ router.post("/", orderValidation, async (req, res) => {
       });
 
       if (existingDebtor) {
-        existingDebtor.totalDebt += debtAmount;
-        existingDebtor.remainingDebt += debtAmount;
-        existingDebtor.description += `\n[+${debtAmount?.toLocaleString()} so'm] Yangi buyurtma`;
+        existingDebtor.totalDebt = {
+          usd: (existingDebtor.totalDebt?.usd || 0) + (debtAmount.usd || 0),
+          uzs: (existingDebtor.totalDebt?.uzs || 0) + (debtAmount.uzs || 0),
+        };
+        existingDebtor.remainingDebt = {
+          usd: (existingDebtor.remainingDebt?.usd || 0) + (debtAmount.usd || 0),
+          uzs: (existingDebtor.remainingDebt?.uzs || 0) + (debtAmount.uzs || 0),
+        };
+        existingDebtor.description += `\n[+${debtAmount.usd || 0} USD, +${debtAmount.uzs || 0} UZS] Yangi buyurtma`;
         if (new Date(date_returned) > new Date(existingDebtor.date_returned)) {
           existingDebtor.date_returned = date_returned;
         }
@@ -371,7 +387,7 @@ router.post("/", orderValidation, async (req, res) => {
           branch,
           order: order._id,
           totalDebt: debtAmount,
-          paidAmount: 0,
+          paidAmount: { usd: 0, uzs: 0 },
           remainingDebt: debtAmount,
           description: req.body.notes || "",
           date_returned,
@@ -383,7 +399,10 @@ router.post("/", orderValidation, async (req, res) => {
       // Client.debt faqat completed bo'lsa
       if (status === "completed") {
         await Client.findByIdAndUpdate(clientId, {
-          $inc: { debt: debtAmount },
+          $inc: {
+            'debt.usd': debtAmount.usd || 0,
+            'debt.uzs': debtAmount.uzs || 0,
+          },
         });
       }
     }

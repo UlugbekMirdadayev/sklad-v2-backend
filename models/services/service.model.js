@@ -77,6 +77,20 @@ const serviceSchema = withBaseFields({
     required: true,
     index: true,
   },
+  car: {
+    model: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [100, "Car model cannot be longer than 100 characters"],
+    },
+    plateNumber: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [20, "Plate number cannot be longer than 20 characters"],
+    },
+  },
 });
 
 // Add compound index for common query patterns

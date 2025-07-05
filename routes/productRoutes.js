@@ -33,6 +33,31 @@ const productValidation = [
     .isInt({ min: 0 })
     .withMessage("Minimal quantity must be a non-negative integer"),
   body("oilKm").optional().isNumeric().withMessage("OilKm must be a number"),
+  // Новые поля:
+  body("clients")
+    .optional()
+    .isArray()
+    .withMessage("Clients must be an array of IDs"),
+  body("clients.*")
+    .optional()
+    .isMongoId()
+    .withMessage("Each client must be a valid Mongo ID"),
+  body("cars")
+    .optional()
+    .isArray()
+    .withMessage("Cars must be an array of IDs"),
+  body("cars.*")
+    .optional()
+    .isMongoId()
+    .withMessage("Each car must be a valid Mongo ID"),
+  body("dailyKm")
+    .optional()
+    .isNumeric()
+    .withMessage("dailyKm must be a number"),
+  body("monthlyKm")
+    .optional()
+    .isNumeric()
+    .withMessage("monthlyKm must be a number"),
   body("unit").notEmpty().withMessage("Unit is required"),
   body("currency")
     .isIn(["UZS", "USD"])

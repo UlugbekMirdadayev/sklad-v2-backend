@@ -33,6 +33,29 @@ const serviceSchema = withBaseFields({
       message: "Services array cannot be empty",
     },
   },
+  products: {
+    type: [
+      {
+        product: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+          required: true,
+        },
+        price: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+        quantity: {
+          type: Number,
+          required: true,
+          default: 1,
+          min: 1,
+        },
+      },
+    ],
+    default: [],
+  },
   description: {
     type: String,
     default: "",
@@ -99,12 +122,21 @@ serviceSchema.index({ branch: 1, status: 1 });
 
 // Add pre-save middleware to update totalPrice
 serviceSchema.pre("save", function (next) {
+  let servicesTotal = 0;
+  let productsTotal = 0;
   if (this.services && this.services.length > 0) {
-    this.totalPrice = this.services.reduce(
+    servicesTotal = this.services.reduce(
       (sum, service) => sum + service.price * service.quantity,
       0
     );
   }
+  if (this.products && this.products.length > 0) {
+    productsTotal = this.products.reduce(
+      (sum, product) => sum + product.price * product.quantity,
+      0
+    );
+  }
+  this.totalPrice = servicesTotal + productsTotal;
   next();
 });
 

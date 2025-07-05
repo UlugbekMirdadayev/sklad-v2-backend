@@ -3,7 +3,9 @@ const mongoose = require("mongoose");
 
 const carSchema = new mongoose.Schema({
   model: { type: String, required: true }, // Mashina rusumi
-  plateNumber: { type: String, required: true }, // Mashina raqami
+  plateNumber: { type: String, required: true },
+  dailyKm: { type: Number, default: 0 }, // Kunlik km
+  monthlyKm: { type: Number, default: 0 }, // Oylik km  
 });
 
 const clientSchema = withBaseFields({

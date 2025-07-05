@@ -319,14 +319,14 @@ router.post("/", orderValidation, async (req, res) => {
     } = req.body;
 
     // Проверка суммы по валютам
-    if (
-      paidAmount.usd + debtAmount.usd !== totalAmount.usd ||
-      paidAmount.uzs + debtAmount.uzs !== totalAmount.uzs
-    ) {
-      return res
-        .status(400)
-        .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total (по валютам)" });
-    }
+    // if (
+    //   paidAmount.usd + debtAmount.usd !== totalAmount.usd ||
+    //   paidAmount.uzs + debtAmount.uzs !== totalAmount.uzs
+    // ) {
+    //   return res
+    //     .status(400)
+    //     .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total (по валютам)" });
+    // }
 
     // Product quantityni faqat "completed" statusda kamaytirish
     if (status === "completed") {
@@ -477,11 +477,11 @@ router.patch("/:id", orderValidation, async (req, res) => {
       status,
       client: clientId,
     } = req.body;
-    if (paidAmount + debtAmount !== totalAmount) {
-      return res
-        .status(400)
-        .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
-    }
+    // if (paidAmount + debtAmount !== totalAmount) {
+    //   return res
+    //     .status(400)
+    //     .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total" });
+    // }
 
     // Eski productlarni qaytarish agar eski status completed bo'lsa
     if (products && order.status === "completed") {

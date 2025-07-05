@@ -32,6 +32,7 @@ const productValidation = [
   body("minQuantity")
     .isInt({ min: 0 })
     .withMessage("Minimal quantity must be a non-negative integer"),
+  body("oilKm").optional().isNumeric().withMessage("OilKm must be a number"),
   body("unit").notEmpty().withMessage("Unit is required"),
   body("currency")
     .isIn(["UZS", "USD"])
@@ -162,7 +163,6 @@ router.get("/:id", async (req, res) => {
 });
 
 /** Update product by ID */
-// PATCH: update product with images support
 router.patch(
   "/:id",
   authMiddleware,
@@ -176,23 +176,22 @@ router.patch(
       }
       return res.status(400).json({ errors: errors.array() });
     }
+
     try {
       const product = await Product.findOne({
         _id: req.params.id,
         isDeleted: false,
       });
-      if (!product) return res.status(404).json({ message: "Product not found" });
+      if (!product)
+        return res.status(404).json({ message: "Product not found" });
 
-      // Handle images
       let images = product.images || [];
       if (req.files && req.files.length > 0) {
-        // Optionally, you can remove old images from disk here
         images = req.files.map((file) => "/uploads/products/" + file.filename);
       } else if (Array.isArray(req.body.images)) {
         images = req.body.images;
       }
 
-      // Handle discount if sent as string
       if (typeof req.body.discount === "string") {
         req.body.discount = JSON.parse(req.body.discount);
       }

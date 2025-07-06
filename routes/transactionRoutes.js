@@ -4,7 +4,7 @@ const Transaction = require("../models/transactions/transaction.model");
 const Client = require("../models/clients/client.model");
 
 
-// 📊 Oylik kirim/chiqim statistikasi
+// 📊 Oylik kirim/chiqim statistikasi 
 router.get("/", async (req, res) => {
     try {
         const result = await Transaction.find({ isDeleted: false }).populate("client createdBy");

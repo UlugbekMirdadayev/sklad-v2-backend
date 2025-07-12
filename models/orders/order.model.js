@@ -51,7 +51,6 @@ const orderSchema = withBaseFields({
     type: String,
     enum: ["cash", "card", "debt"],
     default: "cash",
-    required: true,
   },
   date_returned: {
     type: Date,

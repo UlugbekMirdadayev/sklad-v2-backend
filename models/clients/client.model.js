@@ -2,7 +2,7 @@ const { withBaseFields } = require("../base.model");
 const mongoose = require("mongoose");
 
 const carSchema = new mongoose.Schema({
-  model: { type: String, required: true }, // Mashina rusumi
+  model: { type: mongoose.Schema.Types.ObjectId,ref:"Car", required: true }, // Mashina rusumi
   plateNumber: { type: String, required: true },
   dailyKm: { type: Number, default: 0 }, // Kunlik km
   monthlyKm: { type: Number, default: 0 }, // Oylik km  

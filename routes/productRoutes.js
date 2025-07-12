@@ -42,10 +42,7 @@ const productValidation = [
     .optional()
     .isMongoId()
     .withMessage("Each client must be a valid Mongo ID"),
-  body("cars")
-    .optional()
-    .isArray()
-    .withMessage("Cars must be an array of IDs"),
+  body("cars").optional().isArray().withMessage("Cars must be an array of IDs"),
   body("cars.*")
     .optional()
     .isMongoId()
@@ -63,6 +60,7 @@ const productValidation = [
     .isIn(["UZS", "USD"])
     .withMessage("Currency must be UZS or USD"),
   body("createdBy").isMongoId().withMessage("Invalid creator ID"),
+  body("branch").isMongoId().withMessage("Invalid branch ID"),
   body("batch_number").isString().withMessage("Invalid batch number"),
   body("discount")
     .optional()
@@ -92,6 +90,10 @@ const productValidation = [
     .optional()
     .isString()
     .withMessage("Description must be a string"),
+  body("vipPrice")
+    .optional()
+    .isNumeric()
+    .withMessage("vipPrice must be a number"),
 ];
 
 /** Create product with images */
@@ -166,6 +168,7 @@ router.get("/", async (req, res) => {
 
     const products = await Product.find(query)
       .populate("createdBy", "-password")
+      .populate("branch")
       .sort({ createdAt: -1 });
     res.json(products);
   } catch (error) {
@@ -179,7 +182,9 @@ router.get("/:id", async (req, res) => {
     const product = await Product.findOne({
       _id: req.params.id,
       isDeleted: false,
-    }).populate("createdBy", "-password");
+    })
+      .populate("createdBy", "-password")
+      .populate("branch");
     if (!product) return res.status(404).json({ message: "Product not found" });
     res.json(product);
   } catch (error) {
@@ -260,6 +265,7 @@ router.get("/search/:query", async (req, res) => {
       isDeleted: false,
     })
       .populate("createdBy", "-password")
+      .populate("branch")
       .limit(10);
     res.json(products);
   } catch (error) {

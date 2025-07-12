@@ -41,17 +41,17 @@ const serviceSchema = withBaseFields({
           ref: "Product",
           required: true,
         },
-        price: {
-          type: Number,
-          required: true,
-          min: 0,
-        },
-        quantity: {
-          type: Number,
-          required: true,
-          default: 1,
-          min: 1,
-        },
+        // price: {
+        //   type: Number,
+        //   required: true,
+        //   min: 0,
+        // },
+        // quantity: {
+        //   type: Number,
+        //   required: true,
+        //   default: 1,
+        //   min: 1,
+        // },
       },
     ],
     default: [],
@@ -102,7 +102,8 @@ const serviceSchema = withBaseFields({
   },
   car: {
     model: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref:"Car",
       required: true,
       trim: true,
       maxlength: [100, "Car model cannot be longer than 100 characters"],
@@ -114,7 +115,7 @@ const serviceSchema = withBaseFields({
       maxlength: [20, "Plate number cannot be longer than 20 characters"],
     },
   },
-});
+}); 
 
 // Add compound index for common query patterns
 serviceSchema.index({ client: 1, status: 1 });

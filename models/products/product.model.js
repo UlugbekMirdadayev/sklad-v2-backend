@@ -79,6 +79,10 @@ const productSchema = withBaseFields({
     ref: "Batch",
     required: true,
   },
+  vipPrice: {
+    type: Number,
+    default: 0,
+  },
   discount: {
     type: discountSchema,
     default: () => ({}),
@@ -87,6 +91,11 @@ const productSchema = withBaseFields({
     type: String,
     trim: true,
     default: "",
+  },
+  branch: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Branch",
+    // required: true,
   },
 });
 

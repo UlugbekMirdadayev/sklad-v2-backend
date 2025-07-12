@@ -49,6 +49,12 @@ const debtorSchema = withBaseFields({
     enum: ["pending", "partial", "paid"],
     default: "pending",
   },
+  currency: {
+    type: String,
+    enum: ["UZS", "USD"],
+    required: true,
+    default: "UZS",
+  },
 });
 
 module.exports = mongoose.model("Debtor", debtorSchema);

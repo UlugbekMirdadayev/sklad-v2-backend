@@ -3,38 +3,47 @@ const router = express.Router();
 const Order = require("../models/orders/order.model");
 const Debtor = require("../models/debtors/debtor.model");
 const Client = require("../models/clients/client.model");
+const Branch = require("../models/branches/branch.model");
 const Product = require("../models/products/product.model");
 const { body, validationResult } = require("express-validator");
+const clientModel = require("../models/clients/client.model");
+const TelegramBot = require("node-telegram-bot-api");
+const TELEGRAM_TOKEN = "8178295781:AAHsA6ZRWFrYhXItqb1iPHskoJGweMoqk_I";
+const TELEGRAM_CHAT_ID = "-1002192844178"; // o'zingizning chat_id yoki group_id
+const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
 // Order validation
 const orderValidation = [
   body("client").isMongoId().withMessage("Неверный ID клиента"),
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
-  body("orderType").isIn(["vip", "regular"]).withMessage("Неверный тип заказа"),
+  // body("orderType").isIn(["vip", "regular"]).withMessage("Неверный тип заказа"),
   body("products").isArray().withMessage("Продукты должны быть массивом"),
   body("products.*.product").isMongoId().withMessage("Неверный ID продукта"),
   body("products.*.quantity")
     .isNumeric()
     .withMessage("Количество должно быть числом"),
   body("products.*.price").isNumeric().withMessage("Цена должна быть числом"),
-  body("totalAmount")
-    .custom((value) => {
-      if (!value || typeof value !== "object") throw new Error("totalAmount должен быть объектом {usd, uzs}");
-      if (typeof value.usd !== "number" || typeof value.uzs !== "number") throw new Error("totalAmount.usd и totalAmount.uzs должны быть числами");
-      return true;
-    }),
-  body("paidAmount")
-    .custom((value) => {
-      if (!value || typeof value !== "object") throw new Error("paidAmount должен быть объектом {usd, uzs}");
-      if (typeof value.usd !== "number" || typeof value.uzs !== "number") throw new Error("paidAmount.usd и paidAmount.uzs должны быть числами");
-      return true;
-    }),
-  body("debtAmount")
-    .custom((value) => {
-      if (!value || typeof value !== "object") throw new Error("debtAmount должен быть объектом {usd, uzs}");
-      if (typeof value.usd !== "number" || typeof value.uzs !== "number") throw new Error("debtAmount.usd и debtAmount.uzs должны быть числами");
-      return true;
-    }),
+  body("totalAmount").custom((value) => {
+    if (!value || typeof value !== "object")
+      throw new Error("totalAmount должен быть объектом {usd, uzs}");
+    if (typeof value.usd !== "number" || typeof value.uzs !== "number")
+      throw new Error("totalAmount.usd и totalAmount.uzs должны быть числами");
+    return true;
+  }),
+  body("paidAmount").custom((value) => {
+    if (!value || typeof value !== "object")
+      throw new Error("paidAmount должен быть объектом {usd, uzs}");
+    if (typeof value.usd !== "number" || typeof value.uzs !== "number")
+      throw new Error("paidAmount.usd и paidAmount.uzs должны быть числами");
+    return true;
+  }),
+  body("debtAmount").custom((value) => {
+    if (!value || typeof value !== "object")
+      throw new Error("debtAmount должен быть объектом {usd, uzs}");
+    if (typeof value.usd !== "number" || typeof value.uzs !== "number")
+      throw new Error("debtAmount.usd и debtAmount.uzs должны быть числами");
+    return true;
+  }),
   body("paymentType")
     .isIn(["cash", "card", "debt"])
     .withMessage("Неверный метод оплаты"),
@@ -317,7 +326,7 @@ router.post("/", orderValidation, async (req, res) => {
       products,
       status = "pending",
     } = req.body;
-
+    const client = await clientModel.findById(clientId);
     // Проверка суммы по валютам
     // if (
     //   paidAmount.usd + debtAmount.usd !== totalAmount.usd ||
@@ -347,6 +356,9 @@ router.post("/", orderValidation, async (req, res) => {
       }
     }
 
+    // telegram orqali buyurtma haqida xabar yuborish
+    // bot Token = 8178295781:AAHsA6ZRWFrYhXItqb1iPHskoJGweMoqk_I
+
     const order = new Order({
       ...req.body,
       status,
@@ -354,6 +366,31 @@ router.post("/", orderValidation, async (req, res) => {
       debtAmount,
     });
     await order.save();
+
+    // Telegramga xabar yuborish
+    const isBranch = await Branch.findById(branch);
+    const statusName = {
+      pending: "Kutilmoqda",
+      completed: "Yakunlandi",
+      cancelled: "Bekor qilindi",
+    };
+    try {
+      let msg = `🆕 Yangi buyurtma!\n`;
+      msg += `Mijoz: ${client?.fullName || "-"}\n`;
+      msg += `Filial: ${isBranch.name}\n`;
+      msg += `Status: ${statusName[status]}\n`;
+      msg += `Umumiy summa: ${totalAmount.usd} USD, ${totalAmount.uzs} UZS\n`;
+      msg += `Mahsulotlar:\n`;
+      for (const p of products) {
+        const prod = await Product.findById(p.product);
+        msg += `- ${prod?.name || p.product} x ${p.quantity} ${prod.unit} (${
+          p.price
+        } ${prod.currency})\n`;
+      }
+      await bot.sendMessage(TELEGRAM_CHAT_ID, msg);
+    } catch (err) {
+      console.error("Telegramga xabar yuborilmadi:", err.message);
+    }
 
     // Qarzdorlikni faqat "completed" statusda mijozga qo'shish
     const debtTotal = (debtAmount.usd || 0) + (debtAmount.uzs || 0);
@@ -365,49 +402,58 @@ router.post("/", orderValidation, async (req, res) => {
       }
 
       // Debtor record (har doim yoziladi, lekin mijozga debt faqat completed bo'lsa)
-      let existingDebtor = await Debtor.findOne({
-        client: clientId,
-        branch,
-        status: { $ne: "paid" },
-      });
 
-      if (existingDebtor) {
-        existingDebtor.totalDebt = {
-          usd: (existingDebtor.totalDebt?.usd || 0) + (debtAmount.usd || 0),
-          uzs: (existingDebtor.totalDebt?.uzs || 0) + (debtAmount.uzs || 0),
-        };
-        existingDebtor.remainingDebt = {
-          usd: (existingDebtor.remainingDebt?.usd || 0) + (debtAmount.usd || 0),
-          uzs: (existingDebtor.remainingDebt?.uzs || 0) + (debtAmount.uzs || 0),
-        };
-        existingDebtor.description += `\n[+${debtAmount.usd || 0} USD, +${debtAmount.uzs || 0} UZS] Yangi buyurtma`;
-        if (new Date(date_returned) > new Date(existingDebtor.date_returned)) {
-          existingDebtor.date_returned = date_returned;
-        }
-        await existingDebtor.save();
-      } else {
-        const newDebtor = new Debtor({
+      if (clientId) {
+        let existingDebtor = await Debtor.findOne({
           client: clientId,
           branch,
-          order: order._id,
-          totalDebt: debtAmount,
-          paidAmount: { usd: 0, uzs: 0 },
-          remainingDebt: debtAmount,
-          description: req.body.notes || "",
-          date_returned,
-          status: "pending",
+          status: { $ne: "paid" },
         });
-        await newDebtor.save();
-      }
 
-      // Client.debt faqat completed bo'lsa
-      if (status === "completed") {
-        await Client.findByIdAndUpdate(clientId, {
-          $inc: {
-            'debt.usd': debtAmount.usd || 0,
-            'debt.uzs': debtAmount.uzs || 0,
-          },
-        });
+        if (existingDebtor) {
+          existingDebtor.totalDebt = {
+            usd: (existingDebtor.totalDebt?.usd || 0) + (debtAmount.usd || 0),
+            uzs: (existingDebtor.totalDebt?.uzs || 0) + (debtAmount.uzs || 0),
+          };
+          existingDebtor.remainingDebt = {
+            usd:
+              (existingDebtor.remainingDebt?.usd || 0) + (debtAmount.usd || 0),
+            uzs:
+              (existingDebtor.remainingDebt?.uzs || 0) + (debtAmount.uzs || 0),
+          };
+          existingDebtor.description += `\n[+${debtAmount.usd || 0} USD, +${
+            debtAmount.uzs || 0
+          } UZS] Yangi buyurtma`;
+          if (
+            new Date(date_returned) > new Date(existingDebtor.date_returned)
+          ) {
+            existingDebtor.date_returned = date_returned;
+          }
+          await existingDebtor.save();
+        } else {
+          const newDebtor = new Debtor({
+            client: clientId,
+            branch,
+            order: order._id,
+            totalDebt: debtAmount,
+            paidAmount: { usd: 0, uzs: 0 },
+            remainingDebt: debtAmount,
+            description: req.body.notes || "",
+            date_returned,
+            status: "pending",
+          });
+          await newDebtor.save();
+        }
+
+        // Client.debt faqat completed bo'lsa
+        if (status === "completed") {
+          await Client.findByIdAndUpdate(clientId, {
+            $inc: {
+              "debt.usd": debtAmount.usd || 0,
+              "debt.uzs": debtAmount.uzs || 0,
+            },
+          });
+        }
       }
     }
 
@@ -440,6 +486,48 @@ router.get("/", async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get("/bestselling", async (req, res) => {
+  try {
+    const topProducts = await Order.aggregate([
+      { $match: { isDeleted: false, status: "completed" } }, // faqat yakunlangan buyurtmalar
+      { $unwind: "$products" },
+      {
+        $group: {
+          _id: "$products.product",
+          totalSold: { $sum: "$products.quantity" },
+        },
+      },
+      {
+        $lookup: {
+          from: "products",
+          localField: "_id",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      { $unwind: "$product" },
+      {
+        $addFields: {
+          product: {
+            $mergeObjects: ["$product", { totalSold: "$totalSold" }],
+          },
+        },
+      },
+      {
+        $replaceRoot: {
+          newRoot: "$product",
+        },
+      },
+      { $sort: { totalSold: -1 } },
+      { $limit: 20 }, // eng ko‘p 20 ta mahsulot
+    ]);
+
+    res.status(200).json(topProducts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -693,7 +781,7 @@ router.patch(
 router.get("/stats/summary", async (req, res) => {
   try {
     const { branch, startDate, endDate } = req.query;
-    let match = {};
+    let match = { status: "completed" }; // Faqat completed
     if (branch) match.branch = branch;
     if (startDate || endDate) {
       match.createdAt = {};
@@ -706,7 +794,7 @@ router.get("/stats/summary", async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
 
-    // Получаем все заказы для расчета себестоимости и прибыли
+    // Faqat completed orderlar
     const orders = await Order.find(match).populate("products.product");
     let totalCost = 0;
     let totalProfit = 0;
@@ -725,28 +813,24 @@ router.get("/stats/summary", async (req, res) => {
       }
     }
 
-    // Продажи за сегодня
+    // Faqat completed va bugungi orderlar uchun
     const todayOrders = await Order.aggregate([
       { $match: { ...match, createdAt: { $gte: today, $lt: tomorrow } } },
       { $group: { _id: null, todaySales: { $sum: "$paidAmount" } } },
     ]);
 
-    // Количество уникальных продуктов
+    // Unikal mahsulotlar soni (faqat completed)
     const productsCount = await Order.distinct("products.product", match).then(
       (products) => products.length
     );
-
-    // TODO: Расходы и валюты (USD/UZS) добавить после появления соответствующих данных
 
     const stats = {
       todaySales: todayOrders[0]?.todaySales || 0,
       totalPaid,
       totalDebt,
       productsCount,
-      totalCost, // Общая себестоимость
-      totalProfit, // Общая прибыль
-      // expensesUSD: 0, // добавить после появления модели расходов
-      // expensesUZS: 0, // добавить после появления модели расходов
+      totalCost,
+      totalProfit,
     };
 
     res.json(stats);

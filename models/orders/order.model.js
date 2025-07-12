@@ -22,7 +22,6 @@ const orderSchema = withBaseFields({
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Client",
-    required: true,
   },
   products: {
     type: [orderProductSchema],
@@ -43,11 +42,6 @@ const orderSchema = withBaseFields({
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
-  },
-  orderType: {
-    type: String,
-    enum: ["vip", "regular"],
-    required: true,
   },
   notes: {
     type: String,

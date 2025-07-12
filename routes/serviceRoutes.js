@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Service = require("../models/services/service.model");
 const ServiceList = require("../models/services/servicelist.model");
+const { Schema } = require("mongoose");
 
 /**
  * @swagger
@@ -130,7 +131,9 @@ router.post("/", async (req, res) => {
     const serviceIds = servicesInput.map((s) => s.service);
     const foundServices = await ServiceList.find({ _id: { $in: serviceIds } });
     if (foundServices.length !== serviceIds.length) {
-      return res.status(400).json({ error: "Некоторые услуги не найдены в ServiceList" });
+      return res
+        .status(400)
+        .json({ error: "Некоторые услуги не найдены в ServiceList" });
     }
     // Подставляем price из ServiceList, если не указан
     servicesInput = servicesInput.map((s) => {
@@ -144,11 +147,17 @@ router.post("/", async (req, res) => {
     const service = new Service({
       ...req.body,
       services: servicesInput,
+      car: {
+        model: req.body.newCarModel,
+        plateNumber: req.body.newCarPlate,
+      },
+      products: req.body.products.map((i) => ({ product: i })),
     });
     await service.save();
     await service.populate({ path: "services.service" });
     res.status(201).json(service);
   } catch (err) {
+    // console.log(err);
     res.status(400).json({ error: err.message });
   }
 });
@@ -174,7 +183,7 @@ router.get("/", async (req, res) => {
     if (priority) query.priority = priority;
 
     const services = await Service.find(query)
-      .populate("branch createdBy client")
+      .populate("branch createdBy client car.model products.product")
       .populate("services.service")
       .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
       .skip((page - 1) * limit)

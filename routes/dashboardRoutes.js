@@ -93,6 +93,9 @@ const Client = require("../models/clients/client.model");
 // Универсальный роут для dashboard
 router.get("/summary", async (req, res) => {
   try {
+    let { startofMonth, endofManth } = req.query;
+    startofMonth = new Date(startofMonth);
+    endofManth = new Date(endofManth);
     // 1. Top Cards
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -108,8 +111,14 @@ router.get("/summary", async (req, res) => {
       latestServicesDocs,
       topProductsAgg,
       todayIncomeAgg,
+      todayDebts,
+      totalDebts,
     ] = await Promise.all([
-      Service.countDocuments({ createdAt: { $gte: today, $lt: tomorrow } }),
+      Service.find({ createdAt: { $gte: today, $lt: tomorrow } })
+        .populate("branch", "name")
+        .populate("client", "fullName")
+        .populate("car.model", "name")
+        .populate("services.service"),
       Product.countDocuments({ quantity: { $gt: 0 } }),
       Product.find({ quantity: { $lt: 5 } }).select("name quantity"),
       // Weekly income by currency
@@ -148,12 +157,17 @@ router.get("/summary", async (req, res) => {
             {
               $group: {
                 _id: "$productInfo.currency",
-                total: { $sum: { $multiply: ["$products.price", "$products.quantity"] } },
+                total: {
+                  $sum: {
+                    $multiply: ["$products.price", "$products.quantity"],
+                  },
+                },
               },
             },
           ]);
           // Формируем результат по валютам
-          let uzs = 0, usd = 0;
+          let uzs = 0,
+            usd = 0;
           for (const o of orders) {
             if (o._id === "UZS") uzs = o.total;
             if (o._id === "USD") usd = o.total;
@@ -212,16 +226,225 @@ router.get("/summary", async (req, res) => {
             as: "productInfo",
           },
         },
-        { $unwind: "$productInfo" },
+        { $unwind: { path: "$productInfo", preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: "clients",
+            localField: "client",
+            foreignField: "_id",
+            as: "ClientInfo",
+          },
+        },
+        {
+          $unwind: {
+            path: "$ClientInfo",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: "branches",
+            localField: "branch",
+            foreignField: "_id",
+            as: "branchInfo",
+          },
+        },
+        {
+          $unwind: {
+            path: "$branchInfo",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
         {
           $group: {
             _id: "$productInfo.currency",
-            total: { $sum: { $multiply: ["$products.price", "$products.quantity"] } },
+            total: {
+              $sum: { $multiply: ["$products.price", "$products.quantity"] },
+            },
+            client: {
+              $first: {
+                fullName: "$ClientInfo.fullName",
+                phone: "$ClientInfo.phone",
+              },
+            },
+            products: {
+              $push: {
+                product: "$productInfo",
+              },
+            },
+            branch: {
+              $first: {
+                name: "$branchInfo.name",
+              },
+            },
+            status: { $first: "$status" },
+            date_returned: { $first: "$date_returned" },
+            paymentType: { $first: "$paymentType" },
+            notes: { $first: "$notes" },
+            orderType: { $first: "$orderType" },
+            totalAmount: { $first: "$totalAmount" },
+            paidAmount: { $first: "$paidAmount" },
+            debtAmount: { $first: "$debtAmount" },
+          },
+        },
+      ]),
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: today, $lt: tomorrow },
+            isDeleted: false,
+          },
+        },
+        { $unwind: "$products" },
+        {
+          $lookup: {
+            from: "products",
+            localField: "products.product",
+            foreignField: "_id",
+            as: "productInfo",
+          },
+        },
+        { $unwind: { path: "$productInfo", preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: "clients",
+            localField: "client",
+            foreignField: "_id",
+            as: "ClientInfo",
+          },
+        },
+        {
+          $unwind: {
+            path: "$ClientInfo",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: "branches",
+            localField: "branch",
+            foreignField: "_id",
+            as: "branchInfo",
+          },
+        },
+        {
+          $unwind: {
+            path: "$branchInfo",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $group: {
+            _id: "$productInfo.currency",
+            total: {
+              $sum: { $multiply: ["$products.price", "$products.quantity"] },
+            },
+            client: {
+              $first: {
+                fullName: "$ClientInfo.fullName",
+                phone: "$ClientInfo.phone",
+              },
+            },
+            products: {
+              $push: {
+                product: "$productInfo",
+              },
+            },
+            branch: {
+              $first: {
+                name: "$branchInfo.name",
+              },
+            },
+            status: { $first: "$status" },
+            date_returned: { $first: "$date_returned" },
+            paymentType: { $first: "$paymentType" },
+            notes: { $first: "$notes" },
+            orderType: { $first: "$orderType" },
+            totalAmount: { $first: "$totalAmount" },
+            paidAmount: { $first: "$paidAmount" },
+            debtAmount: { $first: "$debtAmount" },
+          },
+        },
+      ]),
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: startofMonth, $lt: endofManth },
+            isDeleted: false,
+          },
+        },
+        { $unwind: "$products" },
+        {
+          $lookup: {
+            from: "products",
+            localField: "products.product",
+            foreignField: "_id",
+            as: "productInfo",
+          },
+        },
+        { $unwind: { path: "$productInfo", preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: "clients",
+            localField: "client",
+            foreignField: "_id",
+            as: "ClientInfo",
+          },
+        },
+        {
+          $unwind: {
+            path: "$ClientInfo",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: "branches",
+            localField: "branch",
+            foreignField: "_id",
+            as: "branchInfo",
+          },
+        },
+        {
+          $unwind: {
+            path: "$branchInfo",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $group: {
+            _id: "$productInfo.currency",
+            total: {
+              $sum: { $multiply: ["$products.price", "$products.quantity"] },
+            },
+            client: {
+              $first: {
+                fullName: "$ClientInfo.fullName",
+                phone: "$ClientInfo.phone",
+              },
+            },
+            products: {
+              $push: {
+                product: "$productInfo",
+              },
+            },
+            branch: {
+              $first: {
+                name: "$branchInfo.name",
+              },
+            },
+            status: { $first: "$status" },
+            date_returned: { $first: "$date_returned" },
+            paymentType: { $first: "$paymentType" },
+            notes: { $first: "$notes" },
+            orderType: { $first: "$orderType" },
+            totalAmount: { $first: "$totalAmount" },
+            paidAmount: { $first: "$paidAmount" },
+            debtAmount: { $first: "$debtAmount" },
           },
         },
       ]),
     ]);
-
 
     // productCapital: сумма всех (costPrice * quantity) по складу, отдельно по валютам
     const productCapitalAgg = await Product.aggregate([
@@ -238,28 +461,46 @@ router.get("/summary", async (req, res) => {
       if (row._id === "USD") productCapital.usd = row.capital;
     }
 
-
     // Общий профит (foyda) и оборот по валютам
-    const allOrders = await Order.find({ isDeleted: false }).populate("products.product");
+    const allOrders = await Order.find({
+      isDeleted: false,
+    }).populate("products.product");
     let totalProfit = { uzs: 0, usd: 0 };
     let totalSales = { uzs: 0, usd: 0 };
+    let todayProfit = { uzs: 0, usd: 0 };
+    let todaySales = { uzs: 0, usd: 0 };
     for (const order of allOrders) {
       for (const op of order.products) {
         const currency = op.product?.currency || "UZS";
         const cost = (op.product?.costPrice || 0) * (op.quantity || 0);
         const revenue = (op.price || 0) * (op.quantity || 0);
-        if (currency === "UZS") {
-          totalProfit.uzs += revenue - cost;
-          totalSales.uzs += revenue;
-        } else if (currency === "USD") {
-          totalProfit.usd += revenue - cost;
-          totalSales.usd += revenue;
+        if (order.createdAt >= today && order.createdAt <= tomorrow) {
+          if (currency === "UZS") {
+            todayProfit.uzs += revenue - cost;
+            todaySales.uzs += revenue;
+          } else if (currency === "USD") {
+            todayProfit.usd += revenue - cost;
+            todaySales.usd += revenue;
+          }
+        } else if (
+          order.createdAt >= startofMonth &&
+          order.createdAt <= endofManth
+        ) {
+          if (currency === "UZS") {
+            totalProfit.uzs += revenue - cost;
+            totalSales.uzs += revenue;
+          } else if (currency === "USD") {
+            totalProfit.usd += revenue - cost;
+            totalSales.usd += revenue;
+          }
         }
       }
     }
 
     // Количество новых клиентов за сегодня
-    const newClientsCount = await Client.countDocuments({ createdAt: { $gte: today, $lt: tomorrow } });
+    const newClientsCount = await Client.countDocuments({
+      createdAt: { $gte: today, $lt: tomorrow },
+    });
     // Общее количество клиентов
     const totalClientsCount = await Client.countDocuments({});
 
@@ -270,16 +511,40 @@ router.get("/summary", async (req, res) => {
       if (row._id === "USD") todayIncome.usd = row.total;
     }
 
+    let totalDebt = { uzs: 0, usd: 0 };
+    for (const row of totalDebts) {
+      if (row.debtAmount.usd > 0) {
+        totalDebt.usd += row.debtAmount.usd;
+      }
+      if (row.debtAmount.uzs > 0) {
+        totalDebt.uzs += row.debtAmount.uzs;
+      }
+    }
+
+    let todayDebt = { uzs: 0, usd: 0 };
+    for (const row of todayDebts) {
+      if (row.debtAmount.usd > 0) {
+        todayDebt.usd += row.debtAmount.usd;
+      }
+      if (row.debtAmount.uzs > 0) {
+        todayDebt.uzs += row.debtAmount.uzs;
+      }
+    }
+
     const topCards = {
-      todayServicesCount,
+      todayServicesCount: todayServicesCount.length,
       todayIncome,
       stockCount,
       lowStockProducts,
       productCapital,
       totalProfit,
       totalSales,
+      todayProfit,
+      todaySales,
       newClientsCount,
       totalClientsCount,
+      totalDebt,
+      todayDebt,
     };
 
     const charts = {
@@ -300,6 +565,8 @@ router.get("/summary", async (req, res) => {
       charts,
       latestServices,
       topProducts: topProductsAgg,
+      todayServices: todayServicesCount,
+      todayIncomes: todayIncomeAgg,
     });
   } catch (e) {
     res.status(500).json({ message: e.message });

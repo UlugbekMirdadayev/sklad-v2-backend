@@ -323,7 +323,7 @@ router.get("/", async (req, res) => {
     }
 
     const clients = await Client.find(query)
-      .populate("branch")
+      .populate("branch cars.model")
       .sort({ createdAt: -1 });
     res.json(clients);
   } catch (error) {
@@ -348,7 +348,6 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 // Обновление клиента
 router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
   try {
@@ -366,30 +365,30 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
       return res.status(400).json({ message: "Клиент уже удален" });
     }
 
-    // If password is present, hash it, otherwise do not update password
     if (req.body.password) {
       req.body.password = await bcrypt.hash(req.body.password, 10);
     } else {
       delete req.body.password;
     }
 
-    // Обработка автомобилей
     if (req.body.cars) {
-      // Валидация номеров автомобилей на уникальность
       const plateNumbers = new Set();
       for (const car of req.body.cars) {
-        const normalizedPlateNumber = car.plateNumber.toUpperCase().trim();
-        if (plateNumbers.has(normalizedPlateNumber)) {
+        const normalizedPlate = car.plateNumber.toUpperCase().trim();
+        if (plateNumbers.has(normalizedPlate)) {
           return res.status(400).json({
-            message: `Дублирующийся номер автомобиля: ${normalizedPlateNumber}`,
+            message: `Дублирующийся номер автомобиля: ${normalizedPlate}`,
           });
         }
-        plateNumbers.add(normalizedPlateNumber);
-        car.plateNumber = normalizedPlateNumber;
+        plateNumbers.add(normalizedPlate);
+        car.plateNumber = normalizedPlate;
+
+        if (typeof car.model === "object" && car.model !== null) {
+          car.model = car.model._id;
+        }
       }
     }
 
-    // Only allow updates to allowed fields
     const allowedFields = [
       "fullName",
       "phone",
@@ -400,17 +399,21 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
       "notes",
       "cars",
     ];
+
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
         client[field] = req.body[field];
       }
     });
+
     await client.save();
     res.json(client);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // Удаление клиента
 router.delete("/:id", authMiddleware, async (req, res) => {

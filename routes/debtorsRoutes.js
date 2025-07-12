@@ -8,6 +8,9 @@ const { body, validationResult } = require("express-validator");
 // Валидация для создания/обновления долга
 const debtValidation = [
   body("client").isMongoId().withMessage("Неверный ID клиента"),
+  body("currency")
+    .isIn(["UZS", "USD"])
+    .withMessage("Currency must be UZS or USD"),
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
   body("totalDebt").isNumeric().withMessage("Сумма долга должна быть числом"),
   body("description").optional().trim(),
@@ -207,6 +210,7 @@ router.post("/", authMiddleware, debtValidation, async (req, res) => {
       totalDebt,
       description,
       date_returned,
+      currency
     } = req.body;
 
     // Mijozni topamiz
@@ -244,6 +248,7 @@ router.post("/", authMiddleware, debtValidation, async (req, res) => {
         date_returned,
         description: description || "",
         status: "pending",
+        currency
       });
 
       await newDebtor.save();
@@ -277,13 +282,13 @@ router.get("/", authMiddleware, async (req, res) => {
     }
     if (search) {
       query.$or = [
-        { "client.name": { $regex: search, $options: "i" } },
+        { "client.fullName": { $regex: search, $options: "i" } },
         { "client.phone": { $regex: search, $options: "i" } },
       ];
     }
 
     const debtors = await Debtor.find(query)
-      .populate("client", "name phone")
+      .populate("client", "fullName phone")
       .populate("branch", "name")
       .sort({ createdAt: -1 });
 
@@ -298,7 +303,7 @@ router.get("/", authMiddleware, async (req, res) => {
 router.get("/:id", authMiddleware, async (req, res) => {
   try {
     const debtor = await Debtor.findById(req.params.id)
-      .populate("client", "name phone")
+      .populate("client", "fullName phone")
       .populate("branch", "name");
 
     if (!debtor) {
@@ -315,7 +320,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
 // Обновление долга по ID
 router.patch("/:id", authMiddleware, async (req, res) => {
   try {
-    const { totalDebt, description, date_returned, status } = req.body;
+    const { totalDebt, description, date_returned, status,currency } = req.body;
 
     const debtor = await Debtor.findById(req.params.id);
     if (!debtor) {
@@ -335,6 +340,9 @@ router.patch("/:id", authMiddleware, async (req, res) => {
     }
     if (status !== undefined) {
       debtor.status = status;
+    }
+    if(currency){
+      debtor.currency = currency
     }
 
     await debtor.save();

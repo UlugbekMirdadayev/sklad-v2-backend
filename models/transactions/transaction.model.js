@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { withBaseFields } = require("../base.model");
 
+
 const transactionSchema = withBaseFields({
   type: {
     type: String,

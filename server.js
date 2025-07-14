@@ -15,7 +15,6 @@ const producRoutes = require("./routes/productRoutes");
 const carRoutes = require("./routes/carRoutes");
 const batchRoutes = require("./routes/batchRoutes");
 const serviceRoutes = require("./routes/serviceRoutes");
-const serviceListRoutes = require("./routes/serviceListRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 
@@ -38,10 +37,8 @@ app.use("/api/products", producRoutes);
 app.use("/api/cars", carRoutes);
 app.use("/api/batches", batchRoutes);
 app.use("/api/services", serviceRoutes);
-app.use("/api/servicelist", serviceListRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/transactions", transactionRoutes);
-
 
 // Handle 404 errors
 app.use((req, res) => {

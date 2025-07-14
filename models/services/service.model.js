@@ -2,37 +2,6 @@ const { withBaseFields } = require("../base.model");
 const mongoose = require("mongoose");
 
 const serviceSchema = withBaseFields({
-  services: {
-    type: [
-      {
-        service: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "ServiceList",
-          required: true,
-        },
-        // Adding price field for each service
-        price: {
-          type: Number,
-          required: true,
-          min: 0,
-        },
-        // Adding quantity field for each service
-        quantity: {
-          type: Number,
-          required: true,
-          default: 1,
-          min: 1,
-        },
-      },
-    ],
-    required: true,
-    validate: {
-      validator: function (arr) {
-        return arr.length > 0;
-      },
-      message: "Services array cannot be empty",
-    },
-  },
   products: {
     type: [
       {
@@ -41,17 +10,17 @@ const serviceSchema = withBaseFields({
           ref: "Product",
           required: true,
         },
-        // price: {
-        //   type: Number,
-        //   required: true,
-        //   min: 0,
-        // },
-        // quantity: {
-        //   type: Number,
-        //   required: true,
-        //   default: 1,
-        //   min: 1,
-        // },
+        price: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+        quantity: {
+          type: Number,
+          required: true,
+          default: 1,
+          min: 1,
+        },
       },
     ],
     default: [],
@@ -77,12 +46,6 @@ const serviceSchema = withBaseFields({
       message: "ReCheck date must be in the future",
     },
   },
-  status: {
-    type: String,
-    enum: ["new", "done", "reject"],
-    default: "new",
-    index: true,
-  },
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
@@ -103,19 +66,17 @@ const serviceSchema = withBaseFields({
   car: {
     model: {
       type: mongoose.Schema.Types.ObjectId,
-      ref:"Car",
-      required: true,
+      ref: "Car",
       trim: true,
       maxlength: [100, "Car model cannot be longer than 100 characters"],
     },
     plateNumber: {
       type: String,
-      required: true,
       trim: true,
       maxlength: [20, "Plate number cannot be longer than 20 characters"],
     },
   },
-}); 
+});
 
 // Add compound index for common query patterns
 serviceSchema.index({ client: 1, status: 1 });

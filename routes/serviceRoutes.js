@@ -1,8 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const Service = require("../models/services/service.model");
-const ServiceList = require("../models/services/servicelist.model");
-const { Schema } = require("mongoose");
 
 /**
  * @swagger
@@ -32,11 +30,6 @@ const { Schema } = require("mongoose");
  *     summary: Получить список сервисных услуг
  *     tags: [Service]
  *     parameters:
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *         description: Статус услуги
  *       - in: query
  *         name: branch
  *         schema:
@@ -126,38 +119,24 @@ const { Schema } = require("mongoose");
 // CREATE a new service
 router.post("/", async (req, res) => {
   try {
-    let servicesInput = req.body.services || [];
-    // Получаем все ServiceList по id
-    const serviceIds = servicesInput.map((s) => s.service);
-    const foundServices = await ServiceList.find({ _id: { $in: serviceIds } });
-    if (foundServices.length !== serviceIds.length) {
-      return res
-        .status(400)
-        .json({ error: "Некоторые услуги не найдены в ServiceList" });
-    }
-    // Подставляем price из ServiceList, если не указан
-    servicesInput = servicesInput.map((s) => {
-      const found = foundServices.find((f) => f._id.toString() === s.service);
-      return {
-        ...s,
-        price: typeof s.price === "number" ? s.price : found.price,
-        quantity: typeof s.quantity === "number" ? s.quantity : 1,
-      };
-    });
+    const products = (req.body.products || []).map((i) => ({
+      product: i.product,
+      price: i.price,
+      quantity: i.quantity,
+    }));
+
     const service = new Service({
       ...req.body,
-      services: servicesInput,
       car: {
         model: req.body.newCarModel,
         plateNumber: req.body.newCarPlate,
       },
-      products: req.body.products.map((i) => ({ product: i })),
+      products,
     });
     await service.save();
-    await service.populate({ path: "services.service" });
+    await service.populate({ path: "products.product" });
     res.status(201).json(service);
   } catch (err) {
-    // console.log(err);
     res.status(400).json({ error: err.message });
   }
 });
@@ -166,7 +145,6 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const {
-      status,
       branch,
       serviceType,
       priority,
@@ -177,7 +155,6 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const query = { isDeleted: false }; // Only show non-deleted services
-    if (status) query.status = status;
     if (branch) query.branch = branch;
     if (serviceType) query.serviceType = serviceType;
     if (priority) query.priority = priority;

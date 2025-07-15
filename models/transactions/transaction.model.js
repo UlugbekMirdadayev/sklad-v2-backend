@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 const { withBaseFields } = require("../base.model");
 
-
 const transactionSchema = withBaseFields({
   type: {
     type: String,
@@ -9,9 +8,18 @@ const transactionSchema = withBaseFields({
     required: true,
   },
   amount: {
-    type: Number,
-    required: true,
-    min: 0,
+    usd: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+    uzs: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
   },
   paymentType: {
     type: String,
@@ -22,18 +30,6 @@ const transactionSchema = withBaseFields({
     type: String,
     trim: true,
     default: "",
-  },
-  client: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Client",
-  },
-  branch: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Branch",
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Admin",
   },
 });
 

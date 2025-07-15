@@ -334,7 +334,9 @@ router.get("/", async (req, res) => {
 // Получение клиента по ID
 router.get("/:id", async (req, res) => {
   try {
-    const client = await Client.findById(req.params.id).populate("branch");
+    const client = await Client.findById(req.params.id).populate(
+      "branch cars.model"
+    );
     if (!client) {
       return res.status(404).json({ message: "Клиент не найден" });
     }
@@ -413,7 +415,6 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 // Удаление клиента
 router.delete("/:id", authMiddleware, async (req, res) => {

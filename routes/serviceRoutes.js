@@ -159,10 +159,29 @@ router.get("/", async (req, res) => {
     if (serviceType) query.serviceType = serviceType;
     if (priority) query.priority = priority;
 
+    // Фильтрация по totalPrice.usd/uzs
+    if (req.query.totalPriceUsdMin)
+      query["totalPrice.usd"] = { $gte: Number(req.query.totalPriceUsdMin) };
+    if (req.query.totalPriceUsdMax)
+      query["totalPrice.usd"] = {
+        ...(query["totalPrice.usd"] || {}),
+        $lte: Number(req.query.totalPriceUsdMax),
+      };
+    if (req.query.totalPriceUzsMin)
+      query["totalPrice.uzs"] = { $gte: Number(req.query.totalPriceUzsMin) };
+    if (req.query.totalPriceUzsMax)
+      query["totalPrice.uzs"] = {
+        ...(query["totalPrice.uzs"] || {}),
+        $lte: Number(req.query.totalPriceUzsMax),
+      };
+
+    // Сортировка по totalPrice.usd/uzs поддерживается
+    const sortField = ["totalPrice.usd", "totalPrice.uzs"].includes(sortBy)
+      ? sortBy
+      : sortBy;
     const services = await Service.find(query)
       .populate("branch createdBy client car.model products.product")
-      .populate("services.service")
-      .sort({ [sortBy]: sortOrder === "desc" ? -1 : 1 })
+      .sort({ [sortField]: sortOrder === "desc" ? -1 : 1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
@@ -185,9 +204,7 @@ router.get("/:id", async (req, res) => {
     const service = await Service.findOne({
       _id: req.params.id,
       isDeleted: false,
-    })
-      .populate("branch createdBy client")
-      .populate("services.service");
+    }).populate("branch createdBy client");
     if (!service) return res.status(404).json({ error: "Service not found" });
     res.json(service);
   } catch (err) {
@@ -198,11 +215,20 @@ router.get("/:id", async (req, res) => {
 // UPDATE a service
 router.put("/:id", async (req, res) => {
   try {
+    // Пересчет totalPrice при обновлении
+    const products = (req.body.products || []).map((i) => ({
+      product: i.product,
+      price: i.price,
+      quantity: i.quantity,
+    }));
+
+    const updateData = {
+      ...req.body,
+      products,
+    };
     const service = await Service.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
-      {
-        ...req.body,
-      },
+      updateData,
       {
         new: true,
         runValidators: true,

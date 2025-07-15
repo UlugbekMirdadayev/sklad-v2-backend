@@ -32,19 +32,33 @@ const serviceSchema = withBaseFields({
     maxlength: [1000, "Description cannot be longer than 1000 characters"],
   },
   totalPrice: {
-    type: Number,
-    required: true,
-    min: 0,
-    default: 0,
+    usd: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+    uzs: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+  },
+  discount: {
+    usd: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    uzs: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
   },
   reCheckDate: {
     type: Date,
-    validate: {
-      validator: function (value) {
-        return !value || value > new Date();
-      },
-      message: "ReCheck date must be in the future",
-    },
   },
   branch: {
     type: mongoose.Schema.Types.ObjectId,

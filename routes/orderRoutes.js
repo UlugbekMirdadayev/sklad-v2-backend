@@ -14,9 +14,13 @@ const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
 // Order validation
 const orderValidation = [
-  body("client").isMongoId().withMessage("Неверный ID клиента"),
+  body("client")
+    .optional({
+      nullable: true,
+    })
+    .isMongoId()
+    .withMessage("Неверный ID клиента"),
   body("branch").isMongoId().withMessage("Неверный ID филиала"),
-  // body("orderType").isIn(["vip", "regular"]).withMessage("Неверный тип заказа"),
   body("products").isArray().withMessage("Продукты должны быть массивом"),
   body("products.*.product").isMongoId().withMessage("Неверный ID продукта"),
   body("products.*.quantity")
@@ -44,6 +48,20 @@ const orderValidation = [
       throw new Error("debtAmount.usd и debtAmount.uzs должны быть числами");
     return true;
   }),
+  body("profitAmount")
+    .optional()
+    .custom((value) => {
+      if (value && typeof value !== "object")
+        throw new Error("profitAmount должен быть объектом {usd, uzs}");
+      if (
+        value &&
+        (typeof value.usd !== "number" || typeof value.uzs !== "number")
+      )
+        throw new Error(
+          "profitAmount.usd и profitAmount.uzs должны быть числами"
+        );
+      return true;
+    }),
   body("paymentType")
     .isIn(["cash", "card", "debt"])
     .withMessage("Неверный метод оплаты"),
@@ -80,9 +98,6 @@ const orderValidation = [
  *                 type: string
  *               branch:
  *                 type: string
- *               orderType:
- *                 type: string
- *                 enum: [vip, regular]
  *               products:
  *                 type: array
  *                 items:
@@ -134,11 +149,6 @@ const orderValidation = [
  *         schema:
  *           type: string
  *         description: ID филиала
- *       - in: query
- *         name: orderType
- *         schema:
- *           type: string
- *         description: Тип заказа
  *       - in: query
  *         name: startDate
  *         schema:
@@ -327,25 +337,34 @@ router.post("/", orderValidation, async (req, res) => {
       status = "pending",
     } = req.body;
     const client = await clientModel.findById(clientId);
-    // Проверка суммы по валютам
-    // if (
-    //   paidAmount.usd + debtAmount.usd !== totalAmount.usd ||
-    //   paidAmount.uzs + debtAmount.uzs !== totalAmount.uzs
-    // ) {
-    //   return res
-    //     .status(400)
-    //     .json({ message: "To'lov balansi noto'g'ri: paid + debt !== total (по валютам)" });
-    // }
+
+    // Har bir mahsulot uchun foyda hisobini qo'shamiz
+    let profitAmount = { usd: 0, uzs: 0 };
+    for (let orderProduct of products) {
+      const product = await Product.findById(orderProduct.product);
+      if (!product) {
+        return res.status(404).json({
+          message: `Продукт с ID ${orderProduct.product} не найден`,
+        });
+      }
+
+      // costPrice va profit hisobini qo'shamiz
+      orderProduct.costPrice = product.costPrice;
+      orderProduct.profit =
+        (orderProduct.price - product.costPrice) * orderProduct.quantity;
+
+      // Umumiy foyda hisobini qo'shamiz (mahsulot valyutasiga qarab)
+      if (product.currency === "USD") {
+        profitAmount.usd += orderProduct.profit;
+      } else {
+        profitAmount.uzs += orderProduct.profit;
+      }
+    }
 
     // Product quantityni faqat "completed" statusda kamaytirish
     if (status === "completed") {
       for (const orderProduct of products) {
         const product = await Product.findById(orderProduct.product);
-        if (!product) {
-          return res.status(404).json({
-            message: `Продукт с ID ${orderProduct.product} не найден`,
-          });
-        }
         if (product.quantity < orderProduct.quantity) {
           return res.status(400).json({
             message: `Недостаточно товара ${product.name}. Доступно: ${product.quantity}, запрошено: ${orderProduct.quantity}`,
@@ -356,14 +375,13 @@ router.post("/", orderValidation, async (req, res) => {
       }
     }
 
-    // telegram orqali buyurtma haqida xabar yuborish
-    // bot Token = 8178295781:AAHsA6ZRWFrYhXItqb1iPHskoJGweMoqk_I
-
     const order = new Order({
       ...req.body,
       status,
       paidAmount,
       debtAmount,
+      profitAmount,
+      products,
     });
     await order.save();
 
@@ -380,12 +398,13 @@ router.post("/", orderValidation, async (req, res) => {
       msg += `Filial: ${isBranch.name}\n`;
       msg += `Status: ${statusName[status]}\n`;
       msg += `Umumiy summa: ${totalAmount.usd} USD, ${totalAmount.uzs} UZS\n`;
+      msg += `Foyda: ${profitAmount.usd} USD, ${profitAmount.uzs} UZS\n`;
       msg += `Mahsulotlar:\n`;
       for (const p of products) {
         const prod = await Product.findById(p.product);
         msg += `- ${prod?.name || p.product} x ${p.quantity} ${prod.unit} (${
           p.price
-        } ${prod.currency})\n`;
+        } ${prod.currency}) - Foyda: ${p.profit} ${prod.currency}\n`;
       }
       await bot.sendMessage(TELEGRAM_CHAT_ID, msg);
     } catch (err) {
@@ -466,12 +485,10 @@ router.post("/", orderValidation, async (req, res) => {
 // GET /orders
 router.get("/", async (req, res) => {
   try {
-    const { client, branch, orderType, startDate, endDate, date_returned } =
-      req.query;
-    let query = {};
+    const { client, branch, startDate, endDate, date_returned } = req.query;
+    let query = { isDeleted: false };
     if (client) query.client = client;
     if (branch) query.branch = branch;
-    if (orderType) query.orderType = orderType;
     if (date_returned) query.date_returned = date_returned;
     if (startDate || endDate) {
       query.createdAt = {};
@@ -536,7 +553,7 @@ router.get("/bestselling", async (req, res) => {
 // GET /orders/:id
 router.get("/:id", async (req, res) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id })
+    const order = await Order.findOne({ _id: req.params.id, isDeleted: false })
       .populate("client")
       .populate("branch")
       .populate("products.product");
@@ -565,6 +582,34 @@ router.patch("/:id", orderValidation, async (req, res) => {
       status,
       client: clientId,
     } = req.body;
+
+    // Agar products o'zgartirilayotgan bo'lsa, foyda hisobini qayta hisoblaymiz
+    let profitAmount = { usd: 0, uzs: 0 };
+    if (products) {
+      for (let orderProduct of products) {
+        const product = await Product.findById(orderProduct.product);
+        if (!product) {
+          return res.status(404).json({
+            message: `Продукт с ID ${orderProduct.product} не найден`,
+          });
+        }
+
+        // costPrice va profit hisobini qo'shamiz
+        orderProduct.costPrice = product.costPrice;
+        orderProduct.profit =
+          (orderProduct.price - product.costPrice) * orderProduct.quantity;
+
+        // Umumiy foyda hisobini qo'shamiz (mahsulot valyutasiga qarab)
+        if (product.currency === "USD") {
+          profitAmount.usd += orderProduct.profit;
+        } else {
+          profitAmount.uzs += orderProduct.profit;
+        }
+      }
+    } else {
+      // Agar products o'zgartirilmayotgan bo'lsa, mavjud profitAmount ni saqlaymiz
+      profitAmount = order.profitAmount || { usd: 0, uzs: 0 };
+    }
     // if (paidAmount + debtAmount !== totalAmount) {
     //   return res
     //     .status(400)
@@ -670,6 +715,10 @@ router.patch("/:id", orderValidation, async (req, res) => {
     }
 
     Object.assign(order, req.body);
+    if (products) {
+      order.products = products;
+    }
+    order.profitAmount = profitAmount;
     await order.save();
 
     res.json(order);
@@ -781,7 +830,7 @@ router.patch(
 router.get("/stats/summary", async (req, res) => {
   try {
     const { branch, startDate, endDate } = req.query;
-    let match = { status: "completed" }; // Faqat completed
+    let match = { status: "completed", isDeleted: false }; // Faqat completed va o'chirilmagan
     if (branch) match.branch = branch;
     if (startDate || endDate) {
       match.createdAt = {};
@@ -796,28 +845,37 @@ router.get("/stats/summary", async (req, res) => {
 
     // Faqat completed orderlar
     const orders = await Order.find(match).populate("products.product");
-    let totalCost = 0;
-    let totalProfit = 0;
-    let totalAmount = 0;
-    let totalPaid = 0;
-    let totalDebt = 0;
+
+    let totalAmount = { usd: 0, uzs: 0 };
+    let totalPaid = { usd: 0, uzs: 0 };
+    let totalDebt = { usd: 0, uzs: 0 };
+    let totalProfit = { usd: 0, uzs: 0 };
+
     for (const order of orders) {
-      totalAmount += order.totalAmount || 0;
-      totalPaid += order.paidAmount || 0;
-      totalDebt += order.debtAmount || 0;
-      for (const op of order.products) {
-        const cost = (op.product?.costPrice || 0) * (op.quantity || 0);
-        const revenue = (op.price || 0) * (op.quantity || 0);
-        totalCost += cost;
-        totalProfit += revenue - cost;
-      }
+      totalAmount.usd += order.totalAmount?.usd || 0;
+      totalAmount.uzs += order.totalAmount?.uzs || 0;
+      totalPaid.usd += order.paidAmount?.usd || 0;
+      totalPaid.uzs += order.paidAmount?.uzs || 0;
+      totalDebt.usd += order.debtAmount?.usd || 0;
+      totalDebt.uzs += order.debtAmount?.uzs || 0;
+      totalProfit.usd += order.profitAmount?.usd || 0;
+      totalProfit.uzs += order.profitAmount?.uzs || 0;
     }
 
-    // Faqat completed va bugungi orderlar uchun
-    const todayOrders = await Order.aggregate([
-      { $match: { ...match, createdAt: { $gte: today, $lt: tomorrow } } },
-      { $group: { _id: null, todaySales: { $sum: "$paidAmount" } } },
-    ]);
+    // Bugungi savdo (completed orderlar)
+    const todayOrders = await Order.find({
+      ...match,
+      createdAt: { $gte: today, $lt: tomorrow },
+    });
+
+    let todaySales = { usd: 0, uzs: 0 };
+    let todayProfit = { usd: 0, uzs: 0 };
+    for (const order of todayOrders) {
+      todaySales.usd += order.paidAmount?.usd || 0;
+      todaySales.uzs += order.paidAmount?.uzs || 0;
+      todayProfit.usd += order.profitAmount?.usd || 0;
+      todayProfit.uzs += order.profitAmount?.uzs || 0;
+    }
 
     // Unikal mahsulotlar soni (faqat completed)
     const productsCount = await Order.distinct("products.product", match).then(
@@ -825,15 +883,55 @@ router.get("/stats/summary", async (req, res) => {
     );
 
     const stats = {
-      todaySales: todayOrders[0]?.todaySales || 0,
+      todaySales,
+      todayProfit,
+      totalAmount,
       totalPaid,
       totalDebt,
-      productsCount,
-      totalCost,
       totalProfit,
+      productsCount,
     };
 
     res.json(stats);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE /orders/:id (soft delete)
+router.delete("/:id", async (req, res) => {
+  try {
+    const order = await Order.findOne({ _id: req.params.id, isDeleted: false });
+    if (!order) return res.status(404).json({ message: "Заказ не найден" });
+
+    // Agar order completed bo'lsa, product quantityni qaytarish
+    if (order.status === "completed") {
+      for (const orderProduct of order.products) {
+        const product = await Product.findById(orderProduct.product);
+        if (product) {
+          product.quantity += orderProduct.quantity;
+          await product.save();
+        }
+      }
+
+      // Agar debt bo'lsa, mijozdan debtni kamaytirish
+      if (order.paymentType === "debt" && order.debtAmount) {
+        const clientDoc = await Client.findById(order.client);
+        if (clientDoc) {
+          clientDoc.debt = {
+            usd: (clientDoc.debt?.usd || 0) - (order.debtAmount?.usd || 0),
+            uzs: (clientDoc.debt?.uzs || 0) - (order.debtAmount?.uzs || 0),
+          };
+          await clientDoc.save();
+        }
+      }
+    }
+
+    // Soft delete
+    order.isDeleted = true;
+    await order.save();
+
+    res.json({ message: "Заказ удален" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

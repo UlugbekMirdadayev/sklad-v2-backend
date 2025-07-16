@@ -16,6 +16,15 @@ const orderProductSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  costPrice: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
+  profit: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const orderSchema = withBaseFields({
@@ -36,6 +45,10 @@ const orderSchema = withBaseFields({
     uzs: { type: Number, required: true, default: 0 },
   },
   debtAmount: {
+    usd: { type: Number, required: true, default: 0 },
+    uzs: { type: Number, required: true, default: 0 },
+  },
+  profitAmount: {
     usd: { type: Number, required: true, default: 0 },
     uzs: { type: Number, required: true, default: 0 },
   },

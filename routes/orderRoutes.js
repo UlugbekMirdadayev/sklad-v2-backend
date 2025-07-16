@@ -855,6 +855,7 @@ router.get("/stats/summary", async (req, res) => {
     let totalPaid = { usd: 0, uzs: 0 };
     let totalDebt = { usd: 0, uzs: 0 };
     let totalProfit = { usd: 0, uzs: 0 };
+    let totalSales = { usd: 0, uzs: 0 };
 
     for (const order of orders) {
       totalAmount.usd += order.totalAmount?.usd || 0;
@@ -865,6 +866,8 @@ router.get("/stats/summary", async (req, res) => {
       totalDebt.uzs += order.debtAmount?.uzs || 0;
       totalProfit.usd += order.profitAmount?.usd || 0;
       totalProfit.uzs += order.profitAmount?.uzs || 0;
+      totalSales.usd += order.paidAmount?.usd || 0;
+      totalSales.uzs += order.paidAmount?.uzs || 0;
     }
 
     // Bugungi savdo (completed orderlar)
@@ -895,6 +898,8 @@ router.get("/stats/summary", async (req, res) => {
       totalDebt,
       totalProfit,
       productsCount,
+      totalSales,
+      totalOrders: await Order.countDocuments(match),
     };
 
     res.json(stats);

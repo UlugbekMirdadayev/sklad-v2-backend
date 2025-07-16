@@ -497,9 +497,14 @@ router.get("/", async (req, res) => {
     }
 
     const orders = await Order.find(query)
-      .populate("client")
       .populate("branch")
       .populate("products.product")
+      .populate({
+        path: "client",
+        populate: {
+          path: "cars.model",
+        },
+      })
       .sort({ createdAt: -1 });
 
     res.json(orders);

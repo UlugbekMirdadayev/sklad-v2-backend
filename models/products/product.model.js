@@ -55,8 +55,7 @@ const productSchema = withBaseFields({
   },
   images: {
     type: [String], // Массив URL или путей к изображениям
-    required: true,
-    validate: (v) => Array.isArray(v) && v.length > 0,
+    default: [],
   },
   unit: {
     type: String,
@@ -75,8 +74,7 @@ const productSchema = withBaseFields({
     required: true,
   },
   batch_number: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Batch",
+    type: String,
     default: null,
   },
   vipPrice: {

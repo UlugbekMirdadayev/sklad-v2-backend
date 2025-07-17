@@ -61,12 +61,6 @@ const productValidation = [
     .withMessage("Currency must be UZS or USD"),
   body("createdBy").isMongoId().withMessage("Invalid creator ID"),
   body("branch").isMongoId().withMessage("Invalid branch ID"),
-  body("batch_number")
-    .optional({
-      nullable: true,
-    })
-    .isString()
-    .withMessage("Invalid batch number"),
   body("discount")
     .optional()
     .custom((value) => {
@@ -130,10 +124,10 @@ router.post(
 
       const product = new Product({ ...req.body, images });
       await product.save();
-      const populatedProduct = await Product.findById(product._id).populate(
-        "createdBy",
-        "-password"
-      );
+      const populatedProduct = await Product.findById(product._id)
+        .populate("createdBy", "-password")
+        .populate("branch")
+        .populate("batch_number");
       res.status(201).json(populatedProduct);
     } catch (error) {
       res.status(500).json({ message: error.message });
@@ -174,6 +168,7 @@ router.get("/", async (req, res) => {
     const products = await Product.find(query)
       .populate("createdBy", "-password")
       .populate("branch")
+      .populate("batch_number")
       .sort({ createdAt: -1 });
     res.json(products);
   } catch (error) {
@@ -189,7 +184,8 @@ router.get("/:id", async (req, res) => {
       isDeleted: false,
     })
       .populate("createdBy", "-password")
-      .populate("branch");
+      .populate("branch")
+      .populate("batch_number");
     if (!product) return res.status(404).json({ message: "Product not found" });
     res.json(product);
   } catch (error) {
@@ -233,10 +229,10 @@ router.patch(
 
       Object.assign(product, req.body, { images });
       await product.save();
-      const populatedProduct = await Product.findById(product._id).populate(
-        "createdBy",
-        "-password"
-      );
+      const populatedProduct = await Product.findById(product._id)
+        .populate("createdBy", "-password")
+        .populate("branch")
+        .populate("batch_number");
       res.json(populatedProduct);
     } catch (error) {
       res.status(500).json({ message: error.message });
@@ -271,6 +267,7 @@ router.get("/search/:query", async (req, res) => {
     })
       .populate("createdBy", "-password")
       .populate("branch")
+      .populate("batch_number")
       .limit(10);
     res.json(products);
   } catch (error) {

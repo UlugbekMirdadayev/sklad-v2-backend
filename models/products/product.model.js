@@ -75,9 +75,9 @@ const productSchema = withBaseFields({
     required: true,
   },
   batch_number: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
     ref: "Batch",
-    required: true,
+    default: null,
   },
   vipPrice: {
     type: Number,

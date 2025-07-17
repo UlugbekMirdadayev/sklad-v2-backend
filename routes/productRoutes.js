@@ -61,7 +61,12 @@ const productValidation = [
     .withMessage("Currency must be UZS or USD"),
   body("createdBy").isMongoId().withMessage("Invalid creator ID"),
   body("branch").isMongoId().withMessage("Invalid branch ID"),
-  body("batch_number").isString().withMessage("Invalid batch number"),
+  body("batch_number")
+    .optional({
+      nullable: true,
+    })
+    .isString()
+    .withMessage("Invalid batch number"),
   body("discount")
     .optional()
     .custom((value) => {

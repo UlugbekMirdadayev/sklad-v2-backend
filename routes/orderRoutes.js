@@ -9,7 +9,7 @@ const { body, validationResult } = require("express-validator");
 const clientModel = require("../models/clients/client.model");
 const TelegramBot = require("node-telegram-bot-api");
 const TELEGRAM_TOKEN = "8178295781:AAHsA6ZRWFrYhXItqb1iPHskoJGweMoqk_I";
-const TELEGRAM_CHAT_ID = "-1002192844178"; // o'zingizning chat_id yoki group_id
+const TELEGRAM_CHAT_ID = "-1002798343078"; // o'zingizning chat_id yoki group_id
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
 // Order validation

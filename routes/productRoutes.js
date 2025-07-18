@@ -149,6 +149,7 @@ router.get("/", async (req, res) => {
       maxSalePrice,
       search,
       batch_number,
+      isAviailable,
     } = req.query;
 
     const query = { isDeleted: false };

@@ -49,12 +49,8 @@ const productSchema = withBaseFields({
     required: true,
     default: 0,
   },
-  oilKm: {
-    type: Number,
-    default: 0,
-  },
   images: {
-    type: [String], // Массив URL или путей к изображениям
+    type: [String], // Массив Telegram file_id
     default: [],
   },
   unit: {
@@ -93,7 +89,10 @@ const productSchema = withBaseFields({
   branch: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
-    // required: true,
+  },
+  isAviailable: {
+    type: Boolean,
+    default: true,
   },
 });
 

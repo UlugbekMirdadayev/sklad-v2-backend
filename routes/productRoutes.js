@@ -4,22 +4,26 @@ const Product = require("../models/products/product.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
+const {
+  uploadPhotoToTelegram,
+  getFileUrlFromTelegram,
+} = require("../config/tg");
 
-/** Multer config for file upload */
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = path.join(__dirname, "../public/uploads/products");
-    fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
+/** Multer config for memory storage (для загрузки в Telegram) */
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20MB лимит (Telegram поддерживает до 20MB для фото)
   },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"), false);
+    }
   },
 });
-const upload = multer({ storage });
 
 /** Product validation rules */
 const productValidation = [
@@ -32,35 +36,21 @@ const productValidation = [
   body("minQuantity")
     .isInt({ min: 0 })
     .withMessage("Minimal quantity must be a non-negative integer"),
-  body("oilKm").optional().isNumeric().withMessage("OilKm must be a number"),
-  // Новые поля:
-  body("clients")
-    .optional()
-    .isArray()
-    .withMessage("Clients must be an array of IDs"),
-  body("clients.*")
-    .optional()
-    .isMongoId()
-    .withMessage("Each client must be a valid Mongo ID"),
-  body("cars").optional().isArray().withMessage("Cars must be an array of IDs"),
-  body("cars.*")
-    .optional()
-    .isMongoId()
-    .withMessage("Each car must be a valid Mongo ID"),
-  body("dailyKm")
-    .optional()
-    .isNumeric()
-    .withMessage("dailyKm must be a number"),
-  body("monthlyKm")
-    .optional()
-    .isNumeric()
-    .withMessage("monthlyKm must be a number"),
   body("unit").notEmpty().withMessage("Unit is required"),
   body("currency")
     .isIn(["UZS", "USD"])
     .withMessage("Currency must be UZS or USD"),
   body("createdBy").isMongoId().withMessage("Invalid creator ID"),
   body("branch").isMongoId().withMessage("Invalid branch ID"),
+  body("images").optional().isArray().withMessage("Images must be an array"),
+  body("images.*")
+    .optional()
+    .custom((value) => {
+      if (typeof value !== "string") {
+        throw new Error("Each image must be a string (Telegram file_id)");
+      }
+      return true;
+    }),
   body("discount")
     .optional()
     .custom((value) => {
@@ -93,9 +83,13 @@ const productValidation = [
     .optional()
     .isNumeric()
     .withMessage("vipPrice must be a number"),
+  body("isAviailable")
+    .optional()
+    .isBoolean()
+    .withMessage("isAviailable must be a boolean"),
 ];
 
-/** Create product with images */
+/** Create product with images uploaded to Telegram */
 router.post(
   "/",
   authMiddleware,
@@ -104,17 +98,21 @@ router.post(
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      if (req.files) {
-        await Promise.all(req.files.map((f) => fs.promises.unlink(f.path)));
-      }
       return res.status(400).json({ errors: errors.array() });
     }
 
     try {
       let images = [];
+
+      // Загружаем файлы в Telegram и получаем file_id
       if (req.files && req.files.length > 0) {
-        images = req.files.map((file) => "/uploads/products/" + file.filename);
+        const uploadPromises = req.files.map(async (file) => {
+          const caption = `Product: ${req.body.name || "Unknown"}`;
+          return await uploadPhotoToTelegram(file.buffer, caption);
+        });
+        images = await Promise.all(uploadPromises);
       } else if (Array.isArray(req.body.images)) {
+        // Если передаются уже существующие file_id
         images = req.body.images;
       }
 
@@ -130,7 +128,11 @@ router.post(
         .populate("batch_number");
       res.status(201).json(populatedProduct);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      console.error("Error creating product:", error);
+      res.status(500).json({
+        message: error.message,
+        error: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      });
     }
   }
 );
@@ -164,6 +166,7 @@ router.get("/", async (req, res) => {
       if (maxSalePrice) query.salePrice.$lte = Number(maxSalePrice);
     }
     if (search) query.name = { $regex: search, $options: "i" };
+    if (isAviailable) query.isAviailable = isAviailable;
 
     const products = await Product.find(query)
       .populate("createdBy", "-password")
@@ -202,9 +205,6 @@ router.patch(
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      if (req.files) {
-        await Promise.all(req.files.map((f) => fs.promises.unlink(f.path)));
-      }
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -217,8 +217,15 @@ router.patch(
         return res.status(404).json({ message: "Product not found" });
 
       let images = product.images || [];
+
+      // Загружаем новые файлы в Telegram, если есть
       if (req.files && req.files.length > 0) {
-        images = req.files.map((file) => "/uploads/products/" + file.filename);
+        const uploadPromises = req.files.map(async (file) => {
+          const caption = `Product Update: ${req.body.name || product.name}`;
+          return await uploadPhotoToTelegram(file.buffer, caption);
+        });
+        const newImages = await Promise.all(uploadPromises);
+        images = [...images, ...newImages]; // Добавляем к существующим
       } else if (Array.isArray(req.body.images)) {
         images = req.body.images;
       }
@@ -235,7 +242,11 @@ router.patch(
         .populate("batch_number");
       res.json(populatedProduct);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      console.error("Error updating product:", error);
+      res.status(500).json({
+        message: error.message,
+        error: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      });
     }
   }
 );
@@ -275,4 +286,588 @@ router.get("/search/:query", async (req, res) => {
   }
 });
 
+/** Get image from Telegram by file_id */
+router.get("/image/:fileId", async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const imageUrl = await getFileUrlFromTelegram(fileId);
+
+    // Можем либо вернуть URL, либо проксировать изображение
+    if (req.query.proxy === "true") {
+      // Проксируем изображение через наш сервер
+      const axios = require("axios");
+      const response = await axios.get(imageUrl, { responseType: "stream" });
+
+      res.setHeader(
+        "Content-Type",
+        response.headers["content-type"] || "image/jpeg"
+      );
+      res.setHeader("Cache-Control", "public, max-age=86400"); // Кешируем на день
+
+      response.data.pipe(res);
+    } else {
+      // Просто возвращаем URL
+      res.json({ imageUrl });
+    }
+  } catch (error) {
+    console.error("Error getting image from Telegram:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Product:
+ *       type: object
+ *       required:
+ *         - name
+ *         - costPrice
+ *         - salePrice
+ *         - quantity
+ *         - minQuantity
+ *         - unit
+ *         - currency
+ *         - createdBy
+ *         - branch
+ *       properties:
+ *         _id:
+ *           type: string
+ *           description: Unique identifier for the product
+ *         name:
+ *           type: string
+ *           description: Product name
+ *         costPrice:
+ *           type: number
+ *           description: Cost price of the product
+ *         salePrice:
+ *           type: number
+ *           description: Sale price of the product
+ *         quantity:
+ *           type: integer
+ *           minimum: 0
+ *           description: Current quantity in stock
+ *         minQuantity:
+ *           type: integer
+ *           minimum: 0
+ *           description: Minimum quantity threshold
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *             description: Telegram file_id of uploaded image
+ *           description: Array of Telegram file_ids
+ *         unit:
+ *           type: string
+ *           description: Unit of measurement
+ *         currency:
+ *           type: string
+ *           enum: [UZS, USD]
+ *           description: Currency type
+ *         createdBy:
+ *           type: string
+ *           description: ID of the admin who created the product
+ *         branch:
+ *           type: string
+ *           description: ID of the branch
+ *         batch_number:
+ *           type: string
+ *           description: Batch number
+ *         vipPrice:
+ *           type: number
+ *           description: VIP price for special customers
+ *         discount:
+ *           type: object
+ *           properties:
+ *             price:
+ *               type: number
+ *               default: 0
+ *               description: Fixed discount price
+ *             children:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   quantity:
+ *                     type: number
+ *                     description: Quantity threshold for discount
+ *                   value:
+ *                     type: number
+ *                     description: Discount percentage or value
+ *               description: Array of quantity-based discounts
+ *           description: Discount configuration for the product
+ *         description:
+ *           type: string
+ *           description: Product description
+ *         isAviailable:
+ *           type: boolean
+ *           default: true
+ *           description: Whether the product is available for sale
+ *         isDeleted:
+ *           type: boolean
+ *           default: false
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *
+ *     ProductInput:
+ *       type: object
+ *       required:
+ *         - name
+ *         - costPrice
+ *         - salePrice
+ *         - quantity
+ *         - minQuantity
+ *         - unit
+ *         - currency
+ *         - createdBy
+ *         - branch
+ *       properties:
+ *         name:
+ *           type: string
+ *           example: "Motor Oil 5W-30"
+ *           description: Product name
+ *         costPrice:
+ *           type: number
+ *           example: 50000
+ *           description: Cost price of the product
+ *         salePrice:
+ *           type: number
+ *           example: 75000
+ *           description: Sale price of the product
+ *         quantity:
+ *           type: integer
+ *           minimum: 0
+ *           example: 100
+ *           description: Current quantity in stock
+ *         minQuantity:
+ *           type: integer
+ *           minimum: 0
+ *           example: 10
+ *           description: Minimum quantity threshold
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *             example: "BAADBAADtgIAAuWfHwTKrF1rVVxxdRYE"
+ *           description: Array of Telegram file_ids
+ *         unit:
+ *           type: string
+ *           example: "литр"
+ *           description: Unit of measurement
+ *         currency:
+ *           type: string
+ *           enum: [UZS, USD]
+ *           example: "UZS"
+ *           description: Currency type
+ *         createdBy:
+ *           type: string
+ *           example: "507f1f77bcf86cd799439011"
+ *           description: ID of the admin who created the product
+ *         branch:
+ *           type: string
+ *           example: "507f1f77bcf86cd799439012"
+ *           description: ID of the branch
+ *         batch_number:
+ *           type: string
+ *           example: "BATCH001"
+ *           description: Batch number
+ *         vipPrice:
+ *           type: number
+ *           example: 70000
+ *           description: VIP price for special customers
+ *         discount:
+ *           type: object
+ *           properties:
+ *             price:
+ *               type: number
+ *               example: 5000
+ *               description: Fixed discount price
+ *             children:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   quantity:
+ *                     type: number
+ *                     example: 5
+ *                     description: Quantity threshold for discount
+ *                   value:
+ *                     type: number
+ *                     example: 10
+ *                     description: Discount percentage or value
+ *               description: Array of quantity-based discounts
+ *           description: Discount configuration for the product
+ *         description:
+ *           type: string
+ *           example: "High quality motor oil for modern engines"
+ *           description: Product description
+ *         isAviailable:
+ *           type: boolean
+ *           example: true
+ *           description: Whether the product is available for sale
+ *
+ *     ProductFormInput:
+ *       type: object
+ *       required:
+ *         - name
+ *         - costPrice
+ *         - salePrice
+ *         - quantity
+ *         - minQuantity
+ *         - unit
+ *         - currency
+ *         - createdBy
+ *         - branch
+ *       properties:
+ *         name:
+ *           type: string
+ *           description: Product name
+ *         costPrice:
+ *           type: number
+ *           description: Cost price of the product
+ *         salePrice:
+ *           type: number
+ *           description: Sale price of the product
+ *         quantity:
+ *           type: integer
+ *           minimum: 0
+ *           description: Current quantity in stock
+ *         minQuantity:
+ *           type: integer
+ *           minimum: 0
+ *           description: Minimum quantity threshold
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *             format: binary
+ *           description: Image files to upload (max 10 files, 20MB each)
+ *         unit:
+ *           type: string
+ *           description: Unit of measurement
+ *         currency:
+ *           type: string
+ *           enum: [UZS, USD]
+ *           description: Currency type
+ *         createdBy:
+ *           type: string
+ *           description: ID of the admin who created the product
+ *         branch:
+ *           type: string
+ *           description: ID of the branch
+ *         batch_number:
+ *           type: string
+ *           description: Batch number
+ *         vipPrice:
+ *           type: number
+ *           description: VIP price for special customers
+ *         discount:
+ *           type: string
+ *           description: JSON string of discount configuration
+ *         description:
+ *           type: string
+ *           description: Product description
+ *         isAviailable:
+ *           type: boolean
+ *           description: Whether the product is available for sale
+ *
+ *   securitySchemes:
+ *     bearerAuth:
+ *       type: http
+ *       scheme: bearer
+ *       bearerFormat: JWT
+ */
+
+/**
+ * @swagger
+ * /api/products:
+ *   post:
+ *     summary: Create a new product with multipart form data or JSON
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             $ref: '#/components/schemas/ProductFormInput'
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ProductInput'
+ *           example:
+ *             name: "Motor Oil 5W-30"
+ *             costPrice: 50000
+ *             salePrice: 75000
+ *             quantity: 100
+ *             minQuantity: 10
+ *             images: ["BAADBAADtgIAAuWfHwTKrF1rVVxxdRYE"]
+ *             unit: "литр"
+ *             currency: "UZS"
+ *             createdBy: "507f1f77bcf86cd799439011"
+ *             branch: "507f1f77bcf86cd799439012"
+ *             description: "High quality motor oil"
+ *             vipPrice: 70000
+ *             isAviailable: true
+ *             discount:
+ *               price: 5000
+ *               children:
+ *                 - quantity: 5
+ *                   value: 10
+ *                 - quantity: 10
+ *                   value: 15
+ *     responses:
+ *       201:
+ *         description: Product created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       msg:
+ *                         type: string
+ *                       param:
+ *                         type: string
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ *
+ *   get:
+ *     summary: Get all products
+ *     tags: [Products]
+ *     parameters:
+ *       - in: query
+ *         name: name
+ *         schema:
+ *           type: string
+ *         description: Filter by product name (case insensitive)
+ *       - in: query
+ *         name: createdBy
+ *         schema:
+ *           type: string
+ *         description: Filter by creator ID
+ *       - in: query
+ *         name: batch_number
+ *         schema:
+ *           type: string
+ *         description: Filter by batch number
+ *       - in: query
+ *         name: minCostPrice
+ *         schema:
+ *           type: number
+ *         description: Minimum cost price filter
+ *       - in: query
+ *         name: maxCostPrice
+ *         schema:
+ *           type: number
+ *         description: Maximum cost price filter
+ *       - in: query
+ *         name: minSalePrice
+ *         schema:
+ *           type: number
+ *         description: Minimum sale price filter
+ *       - in: query
+ *         name: maxSalePrice
+ *         schema:
+ *           type: number
+ *         description: Maximum sale price filter
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by product name
+ *     responses:
+ *       200:
+ *         description: List of products
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Product'
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
+ * /api/products/{id}:
+ *   get:
+ *     summary: Get product by ID
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Product ID
+ *     responses:
+ *       200:
+ *         description: Product details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Product'
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Internal server error
+ *
+ *   patch:
+ *     summary: Update product by ID
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Product ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             $ref: '#/components/schemas/ProductFormInput'
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ProductInput'
+ *     responses:
+ *       200:
+ *         description: Product updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Internal server error
+ *
+ *   delete:
+ *     summary: Soft delete product by ID
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Product ID
+ *     responses:
+ *       200:
+ *         description: Product deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Product soft deleted successfully"
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
+ * /api/products/search/{query}:
+ *   get:
+ *     summary: Quick search products by name
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Search query for product name
+ *     responses:
+ *       200:
+ *         description: Search results (limited to 10)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Product'
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
+ * /api/products/image/{fileId}:
+ *   get:
+ *     summary: Get image from Telegram by file_id
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: fileId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Telegram file_id of the image
+ *       - in: query
+ *         name: proxy
+ *         schema:
+ *           type: string
+ *           enum: ["true", "false"]
+ *         description: Whether to proxy the image through our server or return the URL
+ *     responses:
+ *       200:
+ *         description: Image URL or proxied image
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 imageUrl:
+ *                   type: string
+ *                   example: "https://api.telegram.org/file/bot123:ABC/photos/file_123.jpg"
+ *                   description: Direct URL to the image (when proxy=false)
+ *           image/jpeg:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *               description: Image binary data (when proxy=true)
+ *           image/png:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *               description: Image binary data (when proxy=true)
+ *       500:
+ *         description: Internal server error
+ */

@@ -1,4 +1,3 @@
-```markdown
 # 📦 Hadya Sklad Backend
 
 Bu loyiha **Hadya** shirinlik korxonasi uchun ombor (sklad) va moliyaviy balans boshqaruvi tizimining
@@ -7,11 +6,22 @@ backend qismidir. U Node.js, Express.js va MongoDB texnologiyalaridan foydalanga
 ## 🚀 Asosiy Imkoniyatlar
 
 - 🧁 **Mahsulotlar boshqaruvi** – mahsulotlar, narxlar, ingredientlar.
+- 🖼️ **Base64 rasmlar** – mahsulot rasmlari base64 formatida saqlanadi.
 - 🥣 **Ingredientlar nazorati** – har bir mahsulot tarkibidagi ingredientlar va ularning ombordagi miqdori.
-- 👨‍🍳 **Cheflar bilan bog‘liq logika** – har bir mahsulot yoki tranzaksiya qaysi oshpaz (chef) tomonidan tayyorlanganligi qayd etiladi.
+- 👨‍🍳 **Cheflar bilan bog'liq logika** – har bir mahsulot yoki tranzaksiya qaysi oshpaz (chef) tomonidan tayyorlanganligi qayd etiladi.
 - 📉 **Balans monitoringi** – mahsulot sotilishi va boshqa pul oqimlari (kirim/chiqim) asosida balans hisoblanadi.
 - 💸 **Tranzaksiyalar tarixi** – barcha sotuvlar, xarajatlar va tushumlar alohida log qilinadi.
 - 📊 **Statistik tahlillar** (frontend orqali kengaytiriladi).
+
+## 🖼️ Rasm Yuklash Yangiligi
+
+Endi mahsulot rasmlari **base64** formatida saqlanadi. Bu quyidagi afzalliklarni beradi:
+- ✅ Sodda deployment (fayl tizimi zarur emas)
+- ✅ Atom operatsiyalar (rasm va ma'lumot birgalikda saqlanadi)
+- ✅ Portable ma'lumotlar bazasi
+- ✅ Xavfsizlik (fayl tizimiga kirish zarur emas)
+
+Batafsil ma'lumot uchun: [Base64 Images Documentation](./docs/BASE64_IMAGES.md)
 
 ---
 
@@ -89,7 +99,7 @@ npm run dev
 
 ## 🔐 Autentifikatsiya
 
-API lar `Bearer Token` asosida himoyalangan. Kirish uchun admin foydalanuvchi roli mavjud.
+API lar `Bearer Token` asosida himoyalangan. Kirish uchun admin foydalanuchi roli mavjud.
 
 ---
 
@@ -112,4 +122,3 @@ Bu loyiha shaxsiy foydalanish uchun mo‘ljallangan. Tarqatish va ko‘paytirish
 **Ulug‘bek Mirdadayev**  
 📧 ulugbekmirdadayev1211@gmail.com  
 🔗 [GitHub Profilim](https://github.com/UlugbekMirdadayev)
-```

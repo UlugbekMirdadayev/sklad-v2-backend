@@ -19,10 +19,8 @@ const transactionRoutes = require("./routes/transactionRoutes");
 const debtorRoutes = require("./routes/debtorRoutes");
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: "25mb" })); // Увеличиваем лимит для больших файлов
 app.use(cors());
-// Statik rasm va fayllar uchun
-app.use("/uploads", express.static(__dirname + "/public/uploads"));
 
 // Connect to MongoDB
 connectDB();
@@ -64,7 +62,9 @@ app.use((err, req, res, next) => {
 // Server startup
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-  console.log(`Server ${PORT}-portda ishlayapti`);
+  console.log(
+    `Server ${PORT}-portda ishlayapti\nDocumentatsiya: http://localhost:${PORT}/api-docs`
+  );
   console.log(
     `Server started at: ${new Date(
       new Date().setHours(new Date().getHours() + 5)

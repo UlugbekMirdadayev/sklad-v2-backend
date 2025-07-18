@@ -398,13 +398,17 @@ router.post("/", orderValidation, async (req, res) => {
       msg += `Filial: ${isBranch.name}\n`;
       msg += `Status: ${statusName[status]}\n`;
       msg += `Umumiy summa: ${totalAmount.usd} USD, ${totalAmount.uzs} UZS\n`;
-      msg += `Foyda: ${profitAmount.usd} USD, ${profitAmount.uzs} UZS\n`;
+      msg += `Foyda: ${profitAmount.usd?.toFixed(2) || 0} USD, ${
+        profitAmount.uzs?.toFixed(2) || 0
+      } UZS\n`;
       msg += `Mahsulotlar:\n`;
       for (const p of products) {
         const prod = await Product.findById(p.product);
         msg += `- ${prod?.name || p.product} x ${p.quantity} ${prod.unit} (${
           p.price
-        } ${prod.currency}) - Foyda: ${p.profit} ${prod.currency}\n`;
+        } ${prod.currency}) - Foyda: ${p.profit?.toFixed(2) || 0} ${
+          prod.currency
+        }\n`;
       }
       await bot.sendMessage(TELEGRAM_CHAT_ID, msg);
     } catch (err) {

@@ -30,8 +30,8 @@ const clientSchema = withBaseFields({
     ref: "Branch",
   },
   debt: {
-    type: Number,
-    default: 0,
+    usd: { type: Number, default: 0 },
+    uzs: { type: Number, default: 0 },
   },
   partialPayments: {
     type: [

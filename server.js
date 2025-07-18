@@ -9,7 +9,6 @@ const { swaggerUi, swaggerSpec } = require("./swagger");
 const branchRoutes = require("./routes/branchRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const clientRoutes = require("./routes/clientRoutes");
-const debtorsRoutes = require("./routes/debtorsRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const producRoutes = require("./routes/productRoutes");
 const carRoutes = require("./routes/carRoutes");
@@ -17,6 +16,7 @@ const batchRoutes = require("./routes/batchRoutes");
 const serviceRoutes = require("./routes/serviceRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
+const debtorRoutes = require("./routes/debtorRoutes");
 
 // Middleware
 app.use(express.json());
@@ -31,7 +31,6 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/branches", branchRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/clients", clientRoutes);
-app.use("/api/debtors", debtorsRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/products", producRoutes);
 app.use("/api/cars", carRoutes);
@@ -39,6 +38,7 @@ app.use("/api/batches", batchRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/debtors", debtorRoutes);
 
 // Handle 404 errors
 app.use((req, res) => {

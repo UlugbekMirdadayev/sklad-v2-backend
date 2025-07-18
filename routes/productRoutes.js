@@ -83,10 +83,10 @@ const productValidation = [
     .optional()
     .isNumeric()
     .withMessage("vipPrice must be a number"),
-  body("isAviailable")
+  body("isAvailable")
     .optional()
     .isBoolean()
-    .withMessage("isAviailable must be a boolean"),
+    .withMessage("isAvailable must be a boolean"),
 ];
 
 /** Create product with images uploaded to Telegram */
@@ -149,7 +149,7 @@ router.get("/", async (req, res) => {
       maxSalePrice,
       search,
       batch_number,
-      isAviailable,
+      isAvailable,
     } = req.query;
 
     const query = { isDeleted: false };
@@ -166,9 +166,10 @@ router.get("/", async (req, res) => {
       if (minSalePrice) query.salePrice.$gte = Number(minSalePrice);
       if (maxSalePrice) query.salePrice.$lte = Number(maxSalePrice);
     }
+    if (isAvailable !== undefined) {
+      query.isAvailable = isAvailable === "true";
+    }
     if (search) query.name = { $regex: search, $options: "i" };
-    if (isAviailable) query.isAviailable = isAviailable;
-
     const products = await Product.find(query)
       .populate("createdBy", "-password")
       .populate("branch")
@@ -273,10 +274,18 @@ router.delete("/:id", authMiddleware, async (req, res) => {
 router.get("/search/:query", async (req, res) => {
   try {
     const { query } = req.params;
-    const products = await Product.find({
+    const { isAvailable } = req.query;
+
+    const searchQuery = {
       name: { $regex: query, $options: "i" },
       isDeleted: false,
-    })
+    };
+
+    if (isAvailable !== undefined) {
+      searchQuery.isAvailable = isAvailable === "true";
+    }
+
+    const products = await Product.find(searchQuery)
       .populate("createdBy", "-password")
       .populate("branch")
       .populate("batch_number")
@@ -403,7 +412,7 @@ module.exports = router;
  *         description:
  *           type: string
  *           description: Product description
- *         isAviailable:
+ *         isAvailable:
  *           type: boolean
  *           default: true
  *           description: Whether the product is available for sale
@@ -509,7 +518,7 @@ module.exports = router;
  *           type: string
  *           example: "High quality motor oil for modern engines"
  *           description: Product description
- *         isAviailable:
+ *         isAvailable:
  *           type: boolean
  *           example: true
  *           description: Whether the product is available for sale
@@ -575,7 +584,7 @@ module.exports = router;
  *         description:
  *           type: string
  *           description: Product description
- *         isAviailable:
+ *         isAvailable:
  *           type: boolean
  *           description: Whether the product is available for sale
  *
@@ -614,9 +623,10 @@ module.exports = router;
  *             currency: "UZS"
  *             createdBy: "507f1f77bcf86cd799439011"
  *             branch: "507f1f77bcf86cd799439012"
+ *             batch_number: "BATCH001"
  *             description: "High quality motor oil"
  *             vipPrice: 70000
- *             isAviailable: true
+ *             isAvailable: true
  *             discount:
  *               price: 5000
  *               children:
@@ -696,6 +706,11 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Search by product name
+ *       - in: query
+ *         name: isAvailable
+ *         schema:
+ *           type: boolean
+ *         description: Filter by product availability
  *     responses:
  *       200:
  *         description: List of products
@@ -815,6 +830,11 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Search query for product name
+ *       - in: query
+ *         name: isAvailable
+ *         schema:
+ *           type: boolean
+ *         description: Filter by product availability
  *     responses:
  *       200:
  *         description: Search results (limited to 10)

@@ -90,8 +90,9 @@ const productSchema = withBaseFields({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Branch",
   },
-  isAviailable: {
+  isAvailable: {
     type: Boolean,
+    required: true,
     default: true,
   },
 });

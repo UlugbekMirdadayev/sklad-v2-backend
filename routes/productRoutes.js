@@ -31,11 +31,11 @@ const productValidation = [
   body("costPrice").isNumeric().withMessage("Cost price must be a number"),
   body("salePrice").isNumeric().withMessage("Sale price must be a number"),
   body("quantity")
-    .isInt({ min: 0 })
-    .withMessage("Quantity must be a non-negative integer"),
+    .isNumeric({ min: 0 })
+    .withMessage("Quantity must be a non-negative number"),
   body("minQuantity")
-    .isInt({ min: 0 })
-    .withMessage("Minimal quantity must be a non-negative integer"),
+    .isNumeric({ min: 0 })
+    .withMessage("Minimal quantity must be a non-negative number"),
   body("unit").notEmpty().withMessage("Unit is required"),
   body("currency")
     .isIn(["UZS", "USD"])
@@ -357,11 +357,11 @@ module.exports = router;
  *           type: number
  *           description: Sale price of the product
  *         quantity:
- *           type: integer
+ *           type: number
  *           minimum: 0
  *           description: Current quantity in stock
  *         minQuantity:
- *           type: integer
+ *           type: number
  *           minimum: 0
  *           description: Minimum quantity threshold
  *         images:
@@ -452,14 +452,14 @@ module.exports = router;
  *           example: 75000
  *           description: Sale price of the product
  *         quantity:
- *           type: integer
+ *           type: number
  *           minimum: 0
- *           example: 100
+ *           example: 100.5
  *           description: Current quantity in stock
  *         minQuantity:
- *           type: integer
+ *           type: number
  *           minimum: 0
- *           example: 10
+ *           example: 10.5
  *           description: Minimum quantity threshold
  *         images:
  *           type: array
@@ -546,11 +546,11 @@ module.exports = router;
  *           type: number
  *           description: Sale price of the product
  *         quantity:
- *           type: integer
+ *           type: number
  *           minimum: 0
  *           description: Current quantity in stock
  *         minQuantity:
- *           type: integer
+ *           type: number
  *           minimum: 0
  *           description: Minimum quantity threshold
  *         images:
@@ -616,8 +616,8 @@ module.exports = router;
  *             name: "Motor Oil 5W-30"
  *             costPrice: 50000
  *             salePrice: 75000
- *             quantity: 100
- *             minQuantity: 10
+ *             quantity: 100.5
+ *             minQuantity: 10.5
  *             images: ["BAADBAADtgIAAuWfHwTKrF1rVVxxdRYE"]
  *             unit: "литр"
  *             currency: "UZS"

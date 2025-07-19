@@ -12,8 +12,12 @@ const options = {
     },
     servers: [
       {
-        url: "https://sklad-v2-backend-production.up.railway.app", // o'zgartiring agar boshqa portda bo‘lsa
-        url: "http://localhost:8080", // o'zgartiring agar boshqa portda bo‘lsa
+        url: "http://localhost:8080",
+        description: "Local server",
+      },
+      {
+        url: "https://umaoil.up.railway.app",
+        description: "Production server",
       },
     ],
   },

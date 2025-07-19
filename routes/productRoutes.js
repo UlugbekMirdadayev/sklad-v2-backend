@@ -42,15 +42,20 @@ const productValidation = [
     .withMessage("Currency must be UZS or USD"),
   body("createdBy").isMongoId().withMessage("Invalid creator ID"),
   body("branch").isMongoId().withMessage("Invalid branch ID"),
-  body("images").optional().isArray().withMessage("Images must be an array"),
-  body("images.*")
+  body("images")
     .optional()
     .custom((value) => {
-      if (typeof value !== "string") {
-        throw new Error("Each image must be a string (Telegram file_id)");
+      // Если это строка, преобразуем в массив
+      if (typeof value === "string") {
+        return true;
       }
-      return true;
-    }),
+      // Если это массив, проверяем что все элементы - строки
+      if (Array.isArray(value)) {
+        return value.every(item => typeof item === "string");
+      }
+      throw new Error("Images must be a string or array of strings");
+    })
+    .withMessage("Images must be a string or array of strings"),
   body("discount")
     .optional()
     .custom((value) => {
@@ -111,9 +116,13 @@ router.post(
           return await uploadPhotoToTelegram(file.buffer, caption);
         });
         images = await Promise.all(uploadPromises);
-      } else if (Array.isArray(req.body.images)) {
+      } else if (req.body.images) {
         // Если передаются уже существующие file_id
-        images = req.body.images;
+        if (typeof req.body.images === "string") {
+          images = [req.body.images]; // Преобразуем строку в массив
+        } else if (Array.isArray(req.body.images)) {
+          images = req.body.images;
+        }
       }
 
       if (typeof req.body.discount === "string") {
@@ -228,8 +237,13 @@ router.patch(
         });
         const newImages = await Promise.all(uploadPromises);
         images = [...images, ...newImages]; // Добавляем к существующим
-      } else if (Array.isArray(req.body.images)) {
-        images = req.body.images;
+      } else if (req.body.images) {
+        // Если передаются file_id для замены
+        if (typeof req.body.images === "string") {
+          images = [req.body.images]; // Преобразуем строку в массив
+        } else if (Array.isArray(req.body.images)) {
+          images = req.body.images;
+        }
       }
 
       if (typeof req.body.discount === "string") {
@@ -462,11 +476,16 @@ module.exports = router;
  *           example: 10.5
  *           description: Minimum quantity threshold
  *         images:
- *           type: array
- *           items:
- *             type: string
- *             example: "BAADBAADtgIAAuWfHwTKrF1rVVxxdRYE"
- *           description: Array of Telegram file_ids
+ *           oneOf:
+ *             - type: string
+ *               description: Single Telegram file_id
+ *               example: "BAADBAADtgIAAuWfHwTKrF1rVVxxdRYE"
+ *             - type: array
+ *               items:
+ *                 type: string
+ *                 example: "BAADBAADtgIAAuWfHwTKrF1rVVxxdRYE"
+ *               description: Array of Telegram file_ids
+ *           description: Single file_id or array of Telegram file_ids
  *         unit:
  *           type: string
  *           example: "литр"
@@ -618,7 +637,7 @@ module.exports = router;
  *             salePrice: 75000
  *             quantity: 100.5
  *             minQuantity: 10.5
- *             images: ["BAADBAADtgIAAuWfHwTKrF1rVVxxdRYE"]
+ *             images: "BAADBAADtgIAAuWfHwTKrF1rVVxxdRYE"
  *             unit: "литр"
  *             currency: "UZS"
  *             createdBy: "507f1f77bcf86cd799439011"

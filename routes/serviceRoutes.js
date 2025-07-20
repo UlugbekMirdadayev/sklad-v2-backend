@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Service = require("../models/services/service.model");
+const Transaction = require("../models/transactions/transaction.model");
 
 /**
  * @swagger
@@ -134,6 +135,24 @@ router.post("/", async (req, res) => {
       products,
     });
     await service.save();
+    
+    // Transaction yaratish
+    try {
+      await Transaction.create({
+        type: "service",
+        amount: service.totalPrice || { usd: 0, uzs: 0 },
+        paymentType: "cash", // Default, kerak bo'lsa req.body'dan olish mumkin
+        description: `Service #${service._id} - ${service.serviceType || 'Xizmat'}`,
+        relatedModel: "Service",
+        relatedId: service._id,
+        client: service.client || null,
+        branch: service.branch || null,
+        createdBy: service.createdBy || null,
+      });
+    } catch (transactionError) {
+      console.error("Transaction yaratishda xatolik:", transactionError.message);
+    }
+    
     await service.populate({ path: "products.product" });
     res.status(201).json(service);
   } catch (err) {

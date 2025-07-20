@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Order = require("../models/orders/order.model");
+const Transaction = require("../models/transactions/transaction.model");
 const Debtor = require("../models/debtors/debtor.model");
 const Client = require("../models/clients/client.model");
 const Branch = require("../models/branches/branch.model");
@@ -384,6 +385,23 @@ router.post("/", orderValidation, async (req, res) => {
       products,
     });
     await order.save();
+
+    // Transaction yaratish
+    try {
+      await Transaction.create({
+        type: "order",
+        amount: paidAmount,
+        paymentType: paymentType === "debt" ? "debt" : paymentType,
+        description: `Order #${order._id} - ${products.length} mahsulot`,
+        relatedModel: "Order",
+        relatedId: order._id,
+        client: clientId || null,
+        branch: branch,
+        createdBy: req.user?.id || null,
+      });
+    } catch (transactionError) {
+      console.error("Transaction yaratishda xatolik:", transactionError.message);
+    }
 
     // Telegramga xabar yuborish
     const isBranch = await Branch.findById(branch);

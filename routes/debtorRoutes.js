@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Debtor = require("../models/debtors/debtor.model");
+const Transaction = require("../models/transactions/transaction.model");
 const Client = require("../models/clients/client.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
@@ -179,6 +180,23 @@ router.post("/", authMiddleware, debtorValidation, async (req, res) => {
     });
 
     await debtor.save();
+
+    // Debt yaratish Transaction'ini qo'shish
+    try {
+      await Transaction.create({
+        type: "debt-created",
+        amount: currentDebt,
+        paymentType: "debt",
+        description: `Qarzdor yaratildi - ${description || 'Yangi qarz'}`,
+        relatedModel: "Debtor",
+        relatedId: debtor._id,
+        client: client,
+        branch: null, // Kerak bo'lsa req.body'dan olish mumkin
+        createdBy: req.user?.id || null,
+      });
+    } catch (transactionError) {
+      console.error("Transaction yaratishda xatolik:", transactionError.message);
+    }
 
     // Mijozning umumiy qarzini yangilash
     const clientDoc = await Client.findById(client);
@@ -459,6 +477,23 @@ router.post("/:id/payment", authMiddleware, async (req, res) => {
     }
 
     await debtor.save();
+
+    // To'lov Transaction'ini qo'shish
+    try {
+      await Transaction.create({
+        type: "debt-payment",
+        amount: payment,
+        paymentType: "cash", // Default, kerak bo'lsa req.body'dan olish mumkin
+        description: `Qarz to'lovi - Debtor #${debtor._id}`,
+        relatedModel: "Debtor",
+        relatedId: debtor._id,
+        client: debtor.client,
+        branch: null, // Kerak bo'lsa req.body'dan olish mumkin
+        createdBy: req.user?.id || null,
+      });
+    } catch (transactionError) {
+      console.error("Transaction yaratishda xatolik:", transactionError.message);
+    }
 
     // Mijozning umumiy qarzini yangilash
     const client = await Client.findById(debtor.client);
@@ -771,6 +806,89 @@ router.get("/stats/summary", async (req, res) => {
  * @swagger
  * components:
  *   schemas:
+ *     Client:
+ *       type: object
+ *       properties:
+ *         _id:
+ *           type: string
+ *           description: Mijoz ID
+ *         fullName:
+ *           type: string
+ *           description: Mijozning to'liq ismi
+ *         phone:
+ *           type: string
+ *           description: Telefon raqami
+ *         cars:
+ *           type: array
+ *           description: Mijoz mashinalari
+ *           items:
+ *             type: object
+ *             properties:
+ *               model:
+ *                 type: string
+ *               plateNumber:
+ *                 type: string
+ *               dailyKm:
+ *                 type: number
+ *               monthlyKm:
+ *                 type: number
+ *         isVip:
+ *           type: boolean
+ *           description: VIP mijoz ekanligini ko'rsatadi
+ *           default: false
+ *         branch:
+ *           type: string
+ *           description: Filial ID
+ *         debt:
+ *           type: object
+ *           description: Mijoz qarzi
+ *           properties:
+ *             usd:
+ *               type: number
+ *               minimum: 0
+ *             uzs:
+ *               type: number
+ *               minimum: 0
+ *         partialPayments:
+ *           type: array
+ *           description: Qisman to'lovlar tarixi
+ *           items:
+ *             type: object
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               date:
+ *                 type: string
+ *                 format: date-time
+ *         notes:
+ *           type: string
+ *           description: Qo'shimcha eslatmalar
+ *         birthday:
+ *           type: string
+ *           format: date
+ *           nullable: true
+ *           description: Tug'ilgan kun
+ *         password:
+ *           type: string
+ *           description: Parol
+ *           default: "123456"
+ *         isDeleted:
+ *           type: boolean
+ *           description: O'chirilgan holati
+ *           default: false
+ *         deletedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *           description: O'chirilgan sana
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *           description: Yaratilgan sana
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *           description: Oxirgi yangilanish sanasi
  *     Debtor:
  *       type: object
  *       properties:

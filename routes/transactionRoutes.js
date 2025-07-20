@@ -6,7 +6,9 @@ const Client = require("../models/clients/client.model");
 // 📊 Oylik kirim/chiqim statistikasi
 router.get("/", async (req, res) => {
   try {
-    const result = await Transaction.find({ isDeleted: false });
+    const result = await Transaction.find({ isDeleted: false })
+      .populate("branch")
+      .populate("client");
     res.json({
       transactions: result,
     });
@@ -18,14 +20,17 @@ router.get("/", async (req, res) => {
 // ➕ Kirim
 router.post("/cash-in", async (req, res) => {
   try {
-    let { amount, paymentType, description, branch, createdBy, client } = req.body;
+    let { amount, paymentType, description, branch, createdBy, client } =
+      req.body;
     // amount: { usd, uzs }
     amount = {
       usd: Number(amount?.usd) || 0,
       uzs: Number(amount?.uzs) || 0,
     };
     if (amount.usd < 0 || amount.uzs < 0) {
-      return res.status(400).json({ message: "amount.usd va amount.uzs musbat bo'lishi kerak" });
+      return res
+        .status(400)
+        .json({ message: "amount.usd va amount.uzs musbat bo'lishi kerak" });
     }
     const isClient = client ? await Client.findById(client) : null;
     if (isClient?.isVip) {
@@ -50,13 +55,16 @@ router.post("/cash-in", async (req, res) => {
 // ➖ Chiqim
 router.post("/cash-out", async (req, res) => {
   try {
-    let { amount, paymentType, description, branch, createdBy, client } = req.body;
+    let { amount, paymentType, description, branch, createdBy, client } =
+      req.body;
     amount = {
       usd: Number(amount?.usd) || 0,
       uzs: Number(amount?.uzs) || 0,
     };
     if (amount.usd < 0 || amount.uzs < 0) {
-      return res.status(400).json({ message: "amount.usd va amount.uzs musbat bo'lishi kerak" });
+      return res
+        .status(400)
+        .json({ message: "amount.usd va amount.uzs musbat bo'lishi kerak" });
     }
     const isClient = client ? await Client.findById(client) : null;
     if (isClient?.isVip) {
@@ -81,13 +89,16 @@ router.post("/cash-out", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const transactionId = req.params.id;
-    let { amount, paymentType, description, branch, createdBy, client } = req.body;
+    let { amount, paymentType, description, branch, createdBy, client } =
+      req.body;
     amount = {
       usd: Number(amount?.usd) || 0,
       uzs: Number(amount?.uzs) || 0,
     };
     if (amount.usd < 0 || amount.uzs < 0) {
-      return res.status(400).json({ message: "amount.usd va amount.uzs musbat bo'lishi kerak" });
+      return res
+        .status(400)
+        .json({ message: "amount.usd va amount.uzs musbat bo'lishi kerak" });
     }
     const transaction = await Transaction.findById(transactionId);
     if (!transaction || transaction.isDeleted) {
@@ -105,9 +116,6 @@ router.put("/:id", async (req, res) => {
         await oldClient.save();
       }
       const newClient = await Client.findById(client);
-      if (!newClient?.isVip) {
-        return res.status(404).json({ message: "VIP Mijoz topilmadi" });
-      }
       if (transaction.type === "cash-in") {
         newClient.debt -= amount.usd;
       } else if (transaction.type === "cash-out") {

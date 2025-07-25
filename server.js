@@ -17,6 +17,7 @@ const serviceRoutes = require("./routes/serviceRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const debtorRoutes = require("./routes/debtorRoutes");
+const smsRoutes = require("./routes/smsRoutes");
 
 // Middleware
 app.use(express.json({ limit: "25mb" })); // Увеличиваем лимит для больших файлов
@@ -37,6 +38,7 @@ app.use("/api/services", serviceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/debtors", debtorRoutes);
+app.use("/api/sms", smsRoutes);
 
 // Handle 404 errors
 app.use((req, res) => {

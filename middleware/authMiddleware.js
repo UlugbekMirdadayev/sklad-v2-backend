@@ -31,6 +31,9 @@ const authMiddleware = async (req, res, next) => {
             .status(401)
             .json({ message: "Client Token is invalid or expired!" });
         }
+        
+        // Устанавливаем req.client для использования в routes
+        req.client = client;
         // If all checks pass, proceed to the next middleware
         next();
       } catch (error) {
@@ -46,6 +49,9 @@ const authMiddleware = async (req, res, next) => {
             .status(401)
             .json({ message: "Admin Token is invalid or expired!" });
         }
+        
+        // Устанавливаем req.admin для использования в routes
+        req.admin = admin;
         next();
       } catch (error) {
         return res.status(500).json({ message: error.message });

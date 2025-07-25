@@ -10,14 +10,23 @@ const smsSchema = new mongoose.Schema(
     message: {
       type: String,
       required: true,
-      maxlength: 160,
+      maxlength: 918, // Увеличили лимит согласно API
     },
     status: {
       type: String,
-      enum: ["pending", "sent", "delivered", "failed"],
+      enum: [
+        "pending", "sent", "delivered", "failed", "waiting", 
+        "NEW", "STORED", "ACCEPTED", "PARTDELIVERED", "DELIVERED", 
+        "REJECTED", "UNDELIV", "UNDELIVERABLE", "EXPIRED", 
+        "REJECTD", "DELETED", "UNKNOWN", "ENROUTE", "DELIVRD"
+      ],
       default: "pending",
     },
-    eskizMessageId: {
+    messageId: { // Eskiz message ID
+      type: String,
+      default: null,
+    },
+    eskizMessageId: { // Backward compatibility
       type: String,
       default: null,
     },
@@ -37,6 +46,10 @@ const smsSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    statusNote: { // Дополнительная информация о статусе
+      type: String,
+      default: null,
+    },
     retryCount: {
       type: Number,
       default: 0,
@@ -44,7 +57,7 @@ const smsSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["order", "notification", "verification", "marketing"],
+      enum: ["order", "notification", "verification", "marketing", "service"],
       default: "notification",
     },
     orderId: {
@@ -57,7 +70,12 @@ const smsSchema = new mongoose.Schema(
       ref: "Client",
       default: null,
     },
-    adminId: {
+    sentBy: { // Кто отправил SMS (admin)
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    adminId: { // Backward compatibility
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
       default: null,
@@ -65,6 +83,22 @@ const smsSchema = new mongoose.Schema(
     cost: {
       type: Number,
       default: 0,
+    },
+    parts: { // Количество частей SMS
+      type: Number,
+      default: 1,
+    },
+    callbackUrl: { // URL для callback
+      type: String,
+      default: null,
+    },
+    callbackReceivedAt: { // Когда получен callback
+      type: Date,
+      default: null,
+    },
+    from: { // Отправитель (никнейм)
+      type: String,
+      default: "4546",
     },
   },
   {
@@ -80,14 +114,30 @@ smsSchema.index({ type: 1 });
 smsSchema.index({ createdAt: -1 });
 smsSchema.index({ orderId: 1 });
 smsSchema.index({ clientId: 1 });
+smsSchema.index({ sentBy: 1 });
+smsSchema.index({ messageId: 1 });
+smsSchema.index({ eskizMessageId: 1 }); // Backward compatibility
 
 // Virtual maydonlar
 smsSchema.virtual("isDelivered").get(function () {
-  return this.status === "delivered";
+  return this.status === "delivered" || this.status === "DELIVERED" || this.status === "DELIVRD";
 });
 
 smsSchema.virtual("isFailed").get(function () {
-  return this.status === "failed";
+  return this.status === "failed" || this.status === "REJECTED" || 
+         this.status === "UNDELIV" || this.status === "UNDELIVERABLE" || 
+         this.status === "EXPIRED" || this.status === "REJECTD" || 
+         this.status === "DELETED";
+});
+
+smsSchema.virtual("isPending").get(function () {
+  return this.status === "pending" || this.status === "NEW" || 
+         this.status === "waiting" || this.status === "STORED";
+});
+
+smsSchema.virtual("isInProgress").get(function () {
+  return this.status === "sent" || this.status === "ACCEPTED" || 
+         this.status === "ENROUTE" || this.status === "UNKNOWN";
 });
 
 smsSchema.virtual("duration").get(function () {
@@ -98,16 +148,17 @@ smsSchema.virtual("duration").get(function () {
 });
 
 // Metodlar
-smsSchema.methods.markAsSent = function (eskizMessageId, response) {
+smsSchema.methods.markAsSent = function (messageId, response) {
   this.status = "sent";
-  this.eskizMessageId = eskizMessageId;
+  this.messageId = messageId;
+  this.eskizMessageId = messageId; // Backward compatibility
   this.response = response;
   this.sentAt = new Date();
   return this.save();
 };
 
 smsSchema.methods.markAsDelivered = function () {
-  this.status = "delivered";
+  this.status = "DELIVERED";
   this.deliveredAt = new Date();
   return this.save();
 };
@@ -119,8 +170,22 @@ smsSchema.methods.markAsFailed = function (reason) {
   return this.save();
 };
 
+smsSchema.methods.updateStatus = function (status, statusNote = null) {
+  this.status = status;
+  if (statusNote) {
+    this.statusNote = statusNote;
+  }
+  
+  // Автоматически устанавливаем deliveredAt для доставленных SMS
+  if (this.isDelivered && !this.deliveredAt) {
+    this.deliveredAt = new Date();
+  }
+  
+  return this.save();
+};
+
 smsSchema.methods.canRetry = function () {
-  return this.retryCount < 3 && this.status === "failed";
+  return this.retryCount < 3 && this.isFailed;
 };
 
 // Statik metodlar
@@ -133,7 +198,20 @@ smsSchema.statics.findByStatus = function (status) {
 };
 
 smsSchema.statics.findPendingSms = function () {
-  return this.find({ status: "pending" });
+  return this.find({ 
+    status: { 
+      $in: ["pending", "NEW", "waiting", "STORED"] 
+    } 
+  });
+};
+
+smsSchema.statics.findByMessageId = function (messageId) {
+  return this.findOne({ 
+    $or: [
+      { messageId: messageId },
+      { eskizMessageId: messageId }
+    ]
+  });
 };
 
 smsSchema.statics.getStatistics = function (startDate, endDate) {
@@ -149,6 +227,59 @@ smsSchema.statics.getStatistics = function (startDate, endDate) {
         _id: "$status",
         count: { $sum: 1 },
         totalCost: { $sum: "$cost" },
+        totalParts: { $sum: "$parts" },
+      },
+    },
+  ]);
+};
+
+smsSchema.statics.getDetailedStatistics = function (startDate, endDate) {
+  const match = {};
+  if (startDate && endDate) {
+    match.createdAt = { $gte: startDate, $lte: endDate };
+  }
+
+  return this.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        pending: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["pending", "NEW", "waiting", "STORED"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
+        sent: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["sent", "ACCEPTED", "ENROUTE"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
+        delivered: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["delivered", "DELIVERED", "DELIVRD", "PARTDELIVERED"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
+        failed: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["failed", "REJECTED", "UNDELIV", "UNDELIVERABLE", "EXPIRED", "REJECTD", "DELETED"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
+        totalCost: { $sum: "$cost" },
+        totalParts: { $sum: "$parts" },
+        averageParts: { $avg: "$parts" },
       },
     },
   ]);
@@ -168,15 +299,79 @@ smsSchema.statics.getDailyStats = function (days = 30) {
           day: { $dayOfMonth: "$createdAt" },
         },
         total: { $sum: 1 },
-        sent: { $sum: { $cond: [{ $eq: ["$status", "sent"] }, 1, 0] } },
-        delivered: {
-          $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] },
+        pending: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["pending", "NEW", "waiting", "STORED"]] }, 
+              1, 0 
+            ] 
+          } 
         },
-        failed: { $sum: { $cond: [{ $eq: ["$status", "failed"] }, 1, 0] } },
+        sent: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["sent", "ACCEPTED", "ENROUTE"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
+        delivered: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["delivered", "DELIVERED", "DELIVRD", "PARTDELIVERED"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
+        failed: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["failed", "REJECTED", "UNDELIV", "UNDELIVERABLE", "EXPIRED", "REJECTD", "DELETED"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
         totalCost: { $sum: "$cost" },
+        totalParts: { $sum: "$parts" },
       },
     },
     { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
+  ]);
+};
+
+// Статистика по типам SMS
+smsSchema.statics.getTypeStatistics = function (startDate, endDate) {
+  const match = {};
+  if (startDate && endDate) {
+    match.createdAt = { $gte: startDate, $lte: endDate };
+  }
+
+  return this.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: "$type",
+        count: { $sum: 1 },
+        totalCost: { $sum: "$cost" },
+        delivered: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["delivered", "DELIVERED", "DELIVRD", "PARTDELIVERED"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
+        failed: { 
+          $sum: { 
+            $cond: [
+              { $in: ["$status", ["failed", "REJECTED", "UNDELIV", "UNDELIVERABLE", "EXPIRED", "REJECTD", "DELETED"]] }, 
+              1, 0 
+            ] 
+          } 
+        },
+      },
+    },
+    { $sort: { count: -1 } },
   ]);
 };
 

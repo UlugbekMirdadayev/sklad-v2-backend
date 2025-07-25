@@ -50,7 +50,18 @@ const productSchema = withBaseFields({
     default: 0,
   },
   images: {
-    type: [String], // Массив Telegram file_id
+    type: [
+      {
+        fileURL: {
+          type: String,
+          required: true,
+        },
+        file_id: {
+          type: String,
+          required: true,
+        },
+      },
+    ],
     default: [],
   },
   unit: {
@@ -96,5 +107,6 @@ const productSchema = withBaseFields({
     default: true,
   },
 });
+
 
 module.exports = mongoose.model("Product", productSchema);

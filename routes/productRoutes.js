@@ -9,6 +9,81 @@ const {
   getFileUrlFromTelegram,
 } = require("../config/tg");
 
+/**
+ * Проверяет, является ли строка URL-адресом
+ * @param {string} str - Строка для проверки
+ * @returns {boolean} true если строка является URL
+ */
+const isURL = (str) => {
+  return (
+    typeof str === "string" &&
+    (str.startsWith("http://") || str.startsWith("https://"))
+  );
+};
+
+/**
+ * Проверяет, является ли строка валидным Telegram file_id
+ * @param {string} str - Строка для проверки
+ * @returns {boolean} true если строка может быть file_id
+ */
+const isValidFileId = (str) => {
+  return typeof str === "string" && !isURL(str) && str.length > 0;
+};
+
+/**
+ * Обновляет fileURL для изображений продукта, получая актуальные URL из Telegram
+ * @param {Object} product - Объект продукта
+ * @returns {Promise<Object>} - Продукт с обновленными fileURL
+ */
+async function updateProductImageUrls(product) {
+  if (!product || !product.images || product.images.length === 0) {
+    return product;
+  }
+
+  let needsUpdate = false;
+  const updatedImages = [];
+
+  for (const image of product.images) {
+    if (image.file_id && isValidFileId(image.file_id)) {
+      try {
+        // Получаем актуальный URL из Telegram
+        const freshFileURL = await getFileUrlFromTelegram(image.file_id);
+        
+        // Если URL изменился, обновляем
+        if (freshFileURL !== image.fileURL) {
+          updatedImages.push({
+            ...image.toObject ? image.toObject() : image,
+            fileURL: freshFileURL
+          });
+          needsUpdate = true;
+        } else {
+          updatedImages.push(image);
+        }
+      } catch (error) {
+        console.warn(`Не удалось обновить URL для file_id ${image.file_id}:`, error.message);
+        updatedImages.push(image); // Оставляем старый URL
+      }
+    } else {
+      updatedImages.push(image); // Если нет file_id, оставляем как есть
+    }
+  }
+
+  // Если были обновления, сохраняем в базу данных
+  if (needsUpdate && product._id) {
+    try {
+      await Product.findByIdAndUpdate(product._id, { images: updatedImages });
+      console.log(`Обновлены URL изображений для продукта ${product._id}`);
+    } catch (error) {
+      console.warn(`Не удалось сохранить обновленные URL для продукта ${product._id}:`, error.message);
+    }
+  }
+
+  // Возвращаем продукт с обновленными URL
+  const updatedProduct = product.toObject ? product.toObject() : { ...product };
+  updatedProduct.images = updatedImages;
+  return updatedProduct;
+}
+
 /** Multer config for memory storage (для загрузки в Telegram) */
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -31,7 +106,7 @@ const productValidation = [
   body("costPrice").isNumeric().withMessage("Cost price must be a number"),
   body("salePrice").isNumeric().withMessage("Sale price must be a number"),
   body("quantity")
-    .isNumeric({ min: 0 })
+    .isNumeric({ min: 0 })       
     .withMessage("Quantity must be a non-negative number"),
   body("minQuantity")
     .isNumeric({ min: 0 })
@@ -51,11 +126,61 @@ const productValidation = [
       }
       // Если это массив, проверяем что все элементы - строки
       if (Array.isArray(value)) {
-        return value.every(item => typeof item === "string");
+        return value.every((item) => typeof item === "string");
       }
       throw new Error("Images must be a string or array of strings");
     })
     .withMessage("Images must be a string or array of strings"),
+  body("oldImages")
+    .optional()
+    .custom((value) => {
+      // Если это строка (JSON массив URL-адресов)
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) {
+            // Проверяем что все элементы - строки (URL или file_id)
+            return parsed.every((item) => typeof item === "string");
+          }
+          return false;
+        } catch (e) {
+          return false;
+        }
+      }
+      // Если это массив
+      if (Array.isArray(value)) {
+        return value.every((item) => typeof item === "string");
+      }
+      return false;
+    })
+    .withMessage(
+      "Old images must be a JSON string array of URLs or array of strings"
+    ),
+  body("deletedImages")
+    .optional()
+    .custom((value) => {
+      // Если это строка (JSON массив URL-адресов)
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) {
+            // Проверяем что все элементы - строки (URL или file_id)
+            return parsed.every((item) => typeof item === "string");
+          }
+          return false;
+        } catch (e) {
+          return false;
+        }
+      }
+      // Если это массив
+      if (Array.isArray(value)) {
+        return value.every((item) => typeof item === "string");
+      }
+      return false;
+    })
+    .withMessage(
+      "Deleted images must be a JSON string array of URLs or array of strings"
+    ),
   body("discount")
     .optional()
     .custom((value) => {
@@ -109,7 +234,7 @@ router.post(
     try {
       let images = [];
 
-      // Загружаем файлы в Telegram и получаем file_id
+      // Загружаем файлы в Telegram и получаем объекты с file_id и fileURL
       if (req.files && req.files.length > 0) {
         const uploadPromises = req.files.map(async (file) => {
           const caption = `Product: ${req.body.name || "Unknown"}`;
@@ -117,11 +242,26 @@ router.post(
         });
         images = await Promise.all(uploadPromises);
       } else if (req.body.images) {
-        // Если передаются уже существующие file_id
+        // Если передаются уже существующие file_id, преобразуем в нужный формат
         if (typeof req.body.images === "string") {
-          images = [req.body.images]; // Преобразуем строку в массив
+          if (isURL(req.body.images)) {
+            images = [{ file_id: null, fileURL: req.body.images }];
+          } else if (isValidFileId(req.body.images)) {
+            const fileURL = await getFileUrlFromTelegram(req.body.images);
+            images = [{ file_id: req.body.images, fileURL }];
+          }
         } else if (Array.isArray(req.body.images)) {
-          images = req.body.images;
+          const imagePromises = req.body.images.map(async (item) => {
+            if (isURL(item)) {
+              return { file_id: null, fileURL: item };
+            } else if (isValidFileId(item)) {
+              const fileURL = await getFileUrlFromTelegram(item);
+              return { file_id: item, fileURL };
+            }
+            return null; // Пропускаем невалидные элементы
+          });
+          const resolvedImages = await Promise.all(imagePromises);
+          images = resolvedImages.filter((img) => img !== null);
         }
       }
 
@@ -135,7 +275,11 @@ router.post(
         .populate("createdBy", "-password")
         .populate("branch")
         .populate("batch_number");
-      res.status(201).json(populatedProduct);
+
+      // Обновляем fileURL перед отправкой ответа
+      const updatedProduct = await updateProductImageUrls(populatedProduct);
+
+      res.status(201).json(updatedProduct);
     } catch (error) {
       console.error("Error creating product:", error);
       res.status(500).json({
@@ -184,7 +328,15 @@ router.get("/", async (req, res) => {
       .populate("branch")
       .populate("batch_number")
       .sort({ createdAt: -1 });
-    res.json(products);
+
+    // Обновляем fileURL для всех продуктов
+    const updatedProducts = await Promise.all(
+      products.map(async (product) => {
+        return await updateProductImageUrls(product);
+      })
+    );
+
+    res.json(updatedProducts);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -201,7 +353,11 @@ router.get("/:id", async (req, res) => {
       .populate("branch")
       .populate("batch_number");
     if (!product) return res.status(404).json({ message: "Product not found" });
-    res.json(product);
+
+    // Обновляем fileURL для продукта
+    const updatedProduct = await updateProductImageUrls(product);
+
+    res.json(updatedProduct);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -211,7 +367,7 @@ router.get("/:id", async (req, res) => {
 router.patch(
   "/:id",
   authMiddleware,
-  upload.array("images", 10),
+  upload.array("newImages", 10),
   productValidation,
   async (req, res) => {
     const errors = validationResult(req);
@@ -227,22 +383,89 @@ router.patch(
       if (!product)
         return res.status(404).json({ message: "Product not found" });
 
-      let images = product.images || [];
+      let finalImages = [];
 
-      // Загружаем новые файлы в Telegram, если есть
+      // 1. Обрабатываем старые изображения (oldImages)
+      if (req.body.oldImages) {
+        let oldImages = [];
+
+        if (typeof req.body.oldImages === "string") {
+          try {
+            oldImages = JSON.parse(req.body.oldImages);
+          } catch (e) {
+            console.warn(
+              "Не удалось распарсить oldImages:",
+              req.body.oldImages
+            );
+            oldImages = [];
+          }
+        } else if (Array.isArray(req.body.oldImages)) {
+          oldImages = req.body.oldImages;
+        }
+
+        // Добавляем старые изображения (теперь это URL-адреса)
+        for (const oldImgUrl of oldImages) {
+          if (typeof oldImgUrl === "string" && isURL(oldImgUrl)) {
+            finalImages.push({ file_id: null, fileURL: oldImgUrl });
+          } else if (
+            typeof oldImgUrl === "string" &&
+            isValidFileId(oldImgUrl)
+          ) {
+            // На случай если все-таки передали file_id
+            try {
+              const fileURL = await getFileUrlFromTelegram(oldImgUrl);
+              finalImages.push({ file_id: oldImgUrl, fileURL });
+            } catch (error) {
+              console.warn(
+                `Не удалось получить URL для старого file_id ${oldImgUrl}:`,
+                error.message
+              );
+            }
+          } else if (
+            oldImgUrl &&
+            typeof oldImgUrl === "object" &&
+            oldImgUrl.fileURL
+          ) {
+            // На случай если передали объект
+            finalImages.push(oldImgUrl);
+          }
+        }
+      }
+
+      // 2. Загружаем новые файлы в Telegram (newImages)
       if (req.files && req.files.length > 0) {
         const uploadPromises = req.files.map(async (file) => {
           const caption = `Product Update: ${req.body.name || product.name}`;
           return await uploadPhotoToTelegram(file.buffer, caption);
         });
         const newImages = await Promise.all(uploadPromises);
-        images = [...images, ...newImages]; // Добавляем к существующим
-      } else if (req.body.images) {
-        // Если передаются file_id для замены
-        if (typeof req.body.images === "string") {
-          images = [req.body.images]; // Преобразуем строку в массив
-        } else if (Array.isArray(req.body.images)) {
-          images = req.body.images;
+        finalImages = [...finalImages, ...newImages];
+      }
+
+      // 3. Обрабатываем удаленные изображения (deletedImages)
+      if (req.body.deletedImages) {
+        let deletedImages = [];
+
+        if (typeof req.body.deletedImages === "string") {
+          try {
+            deletedImages = JSON.parse(req.body.deletedImages);
+          } catch (e) {
+            console.warn(
+              "Не удалось распарсить deletedImages:",
+              req.body.deletedImages
+            );
+            deletedImages = [];
+          }
+        } else if (Array.isArray(req.body.deletedImages)) {
+          deletedImages = req.body.deletedImages;
+        }
+
+        // 3. Логируем удаленные изображения (deletedImages) для отладки
+        if (deletedImages.length > 0) {
+          console.log(
+            `Удалены изображения для продукта ${product.name || product._id}:`,
+            deletedImages
+          );
         }
       }
 
@@ -250,13 +473,24 @@ router.patch(
         req.body.discount = JSON.parse(req.body.discount);
       }
 
-      Object.assign(product, req.body, { images });
+      // Обновляем данные продукта
+      const updatedData = { ...req.body };
+      delete updatedData.oldImages;
+      delete updatedData.deletedImages;
+      updatedData.images = finalImages;
+
+      Object.assign(product, updatedData);
       await product.save();
+
       const populatedProduct = await Product.findById(product._id)
         .populate("createdBy", "-password")
         .populate("branch")
         .populate("batch_number");
-      res.json(populatedProduct);
+
+      // Обновляем fileURL перед отправкой ответа
+      const updatedProduct = await updateProductImageUrls(populatedProduct);
+
+      res.json(updatedProduct);
     } catch (error) {
       console.error("Error updating product:", error);
       res.status(500).json({
@@ -284,6 +518,104 @@ router.delete("/:id", authMiddleware, async (req, res) => {
   }
 });
 
+/** Add new images to existing product */
+router.post(
+  "/:id/images",
+  authMiddleware,
+  upload.array("images", 10),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const product = await Product.findOne({
+        _id: id,
+        isDeleted: false,
+      });
+
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: "No images provided" });
+      }
+
+      // Загружаем новые файлы в Telegram
+      const uploadPromises = req.files.map(async (file) => {
+        const caption = `Product Add Images: ${product.name}`;
+        return await uploadPhotoToTelegram(file.buffer, caption);
+      });
+
+      const newImages = await Promise.all(uploadPromises);
+
+      // Добавляем новые изображения к существующим
+      product.images.push(...newImages);
+      await product.save();
+
+      const populatedProduct = await Product.findById(product._id)
+        .populate("createdBy", "-password")
+        .populate("branch")
+        .populate("batch_number");
+
+      // Обновляем fileURL перед отправкой ответа
+      const updatedProduct = await updateProductImageUrls(populatedProduct);
+
+      res.json({
+        message: "Images added successfully",
+        product: updatedProduct,
+        addedImages: newImages,
+      });
+    } catch (error) {
+      console.error("Error adding images:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+/** Remove specific image from product */
+router.delete("/:id/images/:fileId", authMiddleware, async (req, res) => {
+  try {
+    const { id, fileId } = req.params;
+
+    const product = await Product.findOne({
+      _id: id,
+      isDeleted: false,
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Находим и удаляем изображение с указанным file_id
+    const imageIndex = product.images.findIndex(
+      (img) => img.file_id === fileId
+    );
+
+    if (imageIndex === -1) {
+      return res.status(404).json({ message: "Image not found in product" });
+    }
+
+    product.images.splice(imageIndex, 1);
+    await product.save();
+
+    const populatedProduct = await Product.findById(product._id)
+      .populate("createdBy", "-password")
+      .populate("branch")
+      .populate("batch_number");
+
+    // Обновляем fileURL перед отправкой ответа
+    const updatedProduct = await updateProductImageUrls(populatedProduct);
+
+    res.json({
+      message: "Image removed successfully",
+      product: updatedProduct,
+    });
+  } catch (error) {
+    console.error("Error removing image:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 /** Quick search products by name */
 router.get("/search/:query", async (req, res) => {
   try {
@@ -304,8 +636,17 @@ router.get("/search/:query", async (req, res) => {
       .populate("branch")
       .populate("batch_number")
       .limit(10);
-    res.json(products);
+
+    // Обновляем fileURL для всех найденных продуктов
+    const updatedProducts = await Promise.all(
+      products.map(async (product) => {
+        return await updateProductImageUrls(product);
+      })
+    );
+
+    res.json(updatedProducts);
   } catch (error) {
+    console.error("Error searching products:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -381,9 +722,15 @@ module.exports = router;
  *         images:
  *           type: array
  *           items:
- *             type: string
- *             description: Telegram file_id of uploaded image
- *           description: Array of Telegram file_ids
+ *             type: object
+ *             properties:
+ *               fileURL:
+ *                 type: string
+ *                 description: Direct URL to the image from Telegram
+ *               file_id:
+ *                 type: string
+ *                 description: Telegram file_id of uploaded image
+ *           description: Array of image objects with file_id and fileURL
  *         unit:
  *           type: string
  *           description: Unit of measurement
@@ -540,6 +887,69 @@ module.exports = router;
  *         isAvailable:
  *           type: boolean
  *           example: true
+ *           description: Whether the product is available for sale
+ *
+ *     ProductFormUpdateInput:
+ *       type: object
+ *       properties:
+ *         name:
+ *           type: string
+ *           description: Product name
+ *         costPrice:
+ *           type: number
+ *           description: Cost price of the product
+ *         salePrice:
+ *           type: number
+ *           description: Sale price of the product
+ *         quantity:
+ *           type: number
+ *           minimum: 0
+ *           description: Current quantity in stock
+ *         minQuantity:
+ *           type: number
+ *           minimum: 0
+ *           description: Minimum quantity threshold
+ *         newImages:
+ *           type: array
+ *           items:
+ *             type: string
+ *             format: binary
+ *           description: New image files to upload (max 10 files, 20MB each)
+ *         oldImages:
+ *           type: string
+ *           description: JSON string array of existing images to keep
+ *           example: '[{"file_id":"ABC123","fileURL":"https://example.com/img1.jpg"}]'
+ *         deletedImages:
+ *           type: string
+ *           description: JSON string array of images to delete
+ *           example: '[{"file_id":"XYZ789","fileURL":"https://example.com/img2.jpg"}]'
+ *         unit:
+ *           type: string
+ *           description: Unit of measurement
+ *         currency:
+ *           type: string
+ *           enum: [UZS, USD]
+ *           description: Currency type
+ *         createdBy:
+ *           type: string
+ *           description: ID of the admin who created the product
+ *         branch:
+ *           type: string
+ *           description: ID of the branch
+ *         batch_number:
+ *           type: string
+ *           description: Batch number
+ *         vipPrice:
+ *           type: number
+ *           description: VIP price for special customers
+ *         discount:
+ *           type: string
+ *           description: JSON string of discount configuration
+ *         description:
+ *           type: string
+ *           description: Product description
+ *         isAvailable:
+ *           type: boolean
  *           description: Whether the product is available for sale
  *
  *     ProductFormInput:
@@ -785,10 +1195,51 @@ module.exports = router;
  *       content:
  *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/ProductFormInput'
+ *             $ref: '#/components/schemas/ProductFormUpdateInput'
+ *           example:
+ *             name: "Updated Motor Oil 5W-30"
+ *             costPrice: 55000
+ *             salePrice: 80000
+ *             newImages: ["binary file 1", "binary file 2"]
+ *             oldImages: '[{"file_id":"ABC123","fileURL":"https://api.telegram.org/file/bot123/photo1.jpg"}]'
+ *             deletedImages: '[{"file_id":"XYZ789","fileURL":"https://api.telegram.org/file/bot123/photo2.jpg"}]'
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/ProductInput'
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: "Updated Motor Oil 5W-30"
+ *               costPrice:
+ *                 type: number
+ *                 example: 55000
+ *               salePrice:
+ *                 type: number
+ *                 example: 80000
+ *               oldImages:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     file_id:
+ *                       type: string
+ *                       example: "ABC123"
+ *                     fileURL:
+ *                       type: string
+ *                       example: "https://api.telegram.org/file/bot123/photo1.jpg"
+ *                 description: Array of existing images to keep
+ *               deletedImages:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     file_id:
+ *                       type: string
+ *                       example: "XYZ789"
+ *                     fileURL:
+ *                       type: string
+ *                       example: "https://api.telegram.org/file/bot123/photo2.jpg"
+ *                 description: Array of images to delete (for logging purposes)
  *     responses:
  *       200:
  *         description: Product updated successfully
@@ -908,6 +1359,108 @@ module.exports = router;
  *               type: string
  *               format: binary
  *               description: Image binary data (when proxy=true)
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
+ * /api/products/{id}/images:
+ *   post:
+ *     summary: Add new images to existing product
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Product ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Image files to upload (max 10 files, 20MB each)
+ *     responses:
+ *       200:
+ *         description: Images added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Images added successfully"
+ *                 product:
+ *                   $ref: '#/components/schemas/Product'
+ *                 addedImages:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       fileURL:
+ *                         type: string
+ *                       file_id:
+ *                         type: string
+ *       400:
+ *         description: No images provided
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Product not found
+ *       500:
+ *         description: Internal server error
+ */
+
+/**
+ * @swagger
+ * /api/products/{id}/images/{fileId}:
+ *   delete:
+ *     summary: Remove specific image from product
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Product ID
+ *       - in: path
+ *         name: fileId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Telegram file_id of the image to remove
+ *     responses:
+ *       200:
+ *         description: Image removed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Image removed successfully"
+ *                 product:
+ *                   $ref: '#/components/schemas/Product'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Product or image not found
  *       500:
  *         description: Internal server error
  */

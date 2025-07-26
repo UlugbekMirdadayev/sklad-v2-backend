@@ -48,19 +48,22 @@ async function updateProductImageUrls(product) {
       try {
         // Получаем актуальный URL из Telegram
         const freshFileURL = await getFileUrlFromTelegram(image.file_id);
-        
+
         // Если URL изменился, обновляем
         if (freshFileURL !== image.fileURL) {
           updatedImages.push({
-            ...image.toObject ? image.toObject() : image,
-            fileURL: freshFileURL
+            ...(image.toObject ? image.toObject() : image),
+            fileURL: freshFileURL,
           });
           needsUpdate = true;
         } else {
           updatedImages.push(image);
         }
       } catch (error) {
-        console.warn(`Не удалось обновить URL для file_id ${image.file_id}:`, error.message);
+        console.warn(
+          `Не удалось обновить URL для file_id ${image.file_id}:`,
+          error.message
+        );
         updatedImages.push(image); // Оставляем старый URL
       }
     } else {
@@ -74,7 +77,10 @@ async function updateProductImageUrls(product) {
       await Product.findByIdAndUpdate(product._id, { images: updatedImages });
       console.log(`Обновлены URL изображений для продукта ${product._id}`);
     } catch (error) {
-      console.warn(`Не удалось сохранить обновленные URL для продукта ${product._id}:`, error.message);
+      console.warn(
+        `Не удалось сохранить обновленные URL для продукта ${product._id}:`,
+        error.message
+      );
     }
   }
 
@@ -106,7 +112,7 @@ const productValidation = [
   body("costPrice").isNumeric().withMessage("Cost price must be a number"),
   body("salePrice").isNumeric().withMessage("Sale price must be a number"),
   body("quantity")
-    .isNumeric({ min: 0 })       
+    .isNumeric({ min: 0 })
     .withMessage("Quantity must be a non-negative number"),
   body("minQuantity")
     .isNumeric({ min: 0 })
@@ -142,9 +148,13 @@ const productValidation = [
             // Проверяем что все элементы - строки (URL или file_id) или объекты с url/fileURL
             return parsed.every((item) => {
               // Поддерживаем как строки, так и объекты с полем url или fileURL
-              return typeof item === "string" || 
-                     (typeof item === "object" && item !== null && 
-                      (typeof item.url === "string" || typeof item.fileURL === "string"));
+              return (
+                typeof item === "string" ||
+                (typeof item === "object" &&
+                  item !== null &&
+                  (typeof item.url === "string" ||
+                    typeof item.fileURL === "string"))
+              );
             });
           }
           return false;
@@ -156,9 +166,13 @@ const productValidation = [
       if (Array.isArray(value)) {
         return value.every((item) => {
           // Поддерживаем как строки, так и объекты с полем url или fileURL
-          return typeof item === "string" || 
-                 (typeof item === "object" && item !== null && 
-                  (typeof item.url === "string" || typeof item.fileURL === "string"));
+          return (
+            typeof item === "string" ||
+            (typeof item === "object" &&
+              item !== null &&
+              (typeof item.url === "string" ||
+                typeof item.fileURL === "string"))
+          );
         });
       }
       return false;
@@ -177,9 +191,13 @@ const productValidation = [
             // Проверяем что все элементы - строки (URL или file_id) или объекты с url/fileURL
             return parsed.every((item) => {
               // Поддерживаем как строки, так и объекты с полем url или fileURL
-              return typeof item === "string" || 
-                     (typeof item === "object" && item !== null && 
-                      (typeof item.url === "string" || typeof item.fileURL === "string"));
+              return (
+                typeof item === "string" ||
+                (typeof item === "object" &&
+                  item !== null &&
+                  (typeof item.url === "string" ||
+                    typeof item.fileURL === "string"))
+              );
             });
           }
           return false;
@@ -191,9 +209,13 @@ const productValidation = [
       if (Array.isArray(value)) {
         return value.every((item) => {
           // Поддерживаем как строки, так и объекты с полем url или fileURL
-          return typeof item === "string" || 
-                 (typeof item === "object" && item !== null && 
-                  (typeof item.url === "string" || typeof item.fileURL === "string"));
+          return (
+            typeof item === "string" ||
+            (typeof item === "object" &&
+              item !== null &&
+              (typeof item.url === "string" ||
+                typeof item.fileURL === "string"))
+          );
         });
       }
       return false;
@@ -441,7 +463,11 @@ router.patch(
             }
           } else if (oldImg && typeof oldImg === "object") {
             // Объект с данными изображения
-            if (oldImg.url && typeof oldImg.url === "string" && isURL(oldImg.url)) {
+            if (
+              oldImg.url &&
+              typeof oldImg.url === "string" &&
+              isURL(oldImg.url)
+            ) {
               // Объект с полем url
               finalImages.push({ file_id: "", fileURL: oldImg.url });
             } else if (oldImg.fileURL && typeof oldImg.fileURL === "string") {
@@ -451,7 +477,11 @@ router.patch(
                 imageToAdd.file_id = "";
               }
               finalImages.push(imageToAdd);
-            } else if (oldImg.file_id && typeof oldImg.file_id === "string" && isValidFileId(oldImg.file_id)) {
+            } else if (
+              oldImg.file_id &&
+              typeof oldImg.file_id === "string" &&
+              isValidFileId(oldImg.file_id)
+            ) {
               // Объект с полем file_id
               try {
                 const fileURL = await getFileUrlFromTelegram(oldImg.file_id);

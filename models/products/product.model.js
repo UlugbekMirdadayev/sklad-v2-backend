@@ -109,5 +109,4 @@ const productSchema = withBaseFields({
   },
 });
 
-
 module.exports = mongoose.model("Product", productSchema);

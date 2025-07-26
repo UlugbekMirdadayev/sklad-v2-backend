@@ -139,11 +139,12 @@ const productValidation = [
         try {
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) {
-            // Проверяем что все элементы - строки (URL или file_id) или объекты с url
+            // Проверяем что все элементы - строки (URL или file_id) или объекты с url/fileURL
             return parsed.every((item) => {
-              // Поддерживаем как строки, так и объекты с полем url
+              // Поддерживаем как строки, так и объекты с полем url или fileURL
               return typeof item === "string" || 
-                     (typeof item === "object" && item !== null && typeof item.url === "string");
+                     (typeof item === "object" && item !== null && 
+                      (typeof item.url === "string" || typeof item.fileURL === "string"));
             });
           }
           return false;
@@ -154,9 +155,10 @@ const productValidation = [
       // Если это массив
       if (Array.isArray(value)) {
         return value.every((item) => {
-          // Поддерживаем как строки, так и объекты с полем url
+          // Поддерживаем как строки, так и объекты с полем url или fileURL
           return typeof item === "string" || 
-                 (typeof item === "object" && item !== null && typeof item.url === "string");
+                 (typeof item === "object" && item !== null && 
+                  (typeof item.url === "string" || typeof item.fileURL === "string"));
         });
       }
       return false;
@@ -172,11 +174,12 @@ const productValidation = [
         try {
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) {
-            // Проверяем что все элементы - строки (URL или file_id) или объекты с url
+            // Проверяем что все элементы - строки (URL или file_id) или объекты с url/fileURL
             return parsed.every((item) => {
-              // Поддерживаем как строки, так и объекты с полем url
+              // Поддерживаем как строки, так и объекты с полем url или fileURL
               return typeof item === "string" || 
-                     (typeof item === "object" && item !== null && typeof item.url === "string");
+                     (typeof item === "object" && item !== null && 
+                      (typeof item.url === "string" || typeof item.fileURL === "string"));
             });
           }
           return false;
@@ -187,9 +190,10 @@ const productValidation = [
       // Если это массив
       if (Array.isArray(value)) {
         return value.every((item) => {
-          // Поддерживаем как строки, так и объекты с полем url
+          // Поддерживаем как строки, так и объекты с полем url или fileURL
           return typeof item === "string" || 
-                 (typeof item === "object" && item !== null && typeof item.url === "string");
+                 (typeof item === "object" && item !== null && 
+                  (typeof item.url === "string" || typeof item.fileURL === "string"));
         });
       }
       return false;
@@ -440,6 +444,13 @@ router.patch(
             if (oldImg.url && typeof oldImg.url === "string" && isURL(oldImg.url)) {
               // Объект с полем url
               finalImages.push({ file_id: "", fileURL: oldImg.url });
+            } else if (oldImg.fileURL && typeof oldImg.fileURL === "string") {
+              // Объект с полем fileURL (уже в правильном формате)
+              const imageToAdd = { ...oldImg };
+              if (!imageToAdd.file_id) {
+                imageToAdd.file_id = "";
+              }
+              finalImages.push(imageToAdd);
             } else if (oldImg.file_id && typeof oldImg.file_id === "string" && isValidFileId(oldImg.file_id)) {
               // Объект с полем file_id
               try {
@@ -451,14 +462,6 @@ router.patch(
                   error.message
                 );
               }
-            } else if (oldImg.fileURL && typeof oldImg.fileURL === "string") {
-              // Объект уже в правильном формате
-              // Убеждаемся что file_id не null
-              const imageToAdd = { ...oldImg };
-              if (!imageToAdd.file_id) {
-                imageToAdd.file_id = "";
-              }
-              finalImages.push(imageToAdd);
             }
           }
         }
@@ -949,12 +952,12 @@ module.exports = router;
  *           description: New image files to upload (max 10 files, 20MB each)
  *         oldImages:
  *           type: string
- *           description: JSON string array of existing images to keep (URLs, file_ids, or objects with url field)
- *           example: '[{"url":"https://example.com/img1.jpg"}, "https://example.com/img2.jpg", "file_id_123"]'
+ *           description: JSON string array of existing images to keep (URLs, file_ids, or objects with url/fileURL field)
+ *           example: '[{"fileURL":"https://example.com/img1.jpg","file_id":"ABC123"}, "https://example.com/img2.jpg", "file_id_123"]'
  *         deletedImages:
  *           type: string
- *           description: JSON string array of images to delete (URLs, file_ids, or objects with url field)
- *           example: '[{"url":"https://example.com/img3.jpg"}, "file_id_456"]'
+ *           description: JSON string array of images to delete (URLs, file_ids, or objects with url/fileURL field)
+ *           example: '[{"fileURL":"https://example.com/img3.jpg","file_id":"XYZ789"}, "file_id_456"]'
  *         unit:
  *           type: string
  *           description: Unit of measurement
@@ -1233,8 +1236,8 @@ module.exports = router;
  *             costPrice: 55000
  *             salePrice: 80000
  *             newImages: ["binary file 1", "binary file 2"]
- *             oldImages: '[{"url":"https://api.telegram.org/file/bot123/photo1.jpg"}, "file_id_123"]'
- *             deletedImages: '[{"url":"https://api.telegram.org/file/bot123/photo2.jpg"}]'
+ *             oldImages: '[{"fileURL":"https://api.telegram.org/file/bot123/photo1.jpg","file_id":"ABC123"}, "file_id_123"]'
+ *             deletedImages: '[{"fileURL":"https://api.telegram.org/file/bot123/photo2.jpg","file_id":"XYZ789"}]'
  *         application/json:
  *           schema:
  *             type: object
@@ -1256,10 +1259,13 @@ module.exports = router;
  *                       example: "https://api.telegram.org/file/bot123/photo1.jpg"
  *                     - type: object
  *                       properties:
- *                         url:
+ *                         fileURL:
  *                           type: string
  *                           example: "https://api.telegram.org/file/bot123/photo1.jpg"
- *                 description: Array of existing images to keep (URLs, file_ids, or objects with url)
+ *                         file_id:
+ *                           type: string
+ *                           example: "ABC123"
+ *                 description: Array of existing images to keep (URLs, file_ids, or objects with fileURL/file_id)
  *               deletedImages:
  *                 type: array
  *                 items:
@@ -1268,10 +1274,13 @@ module.exports = router;
  *                       example: "https://api.telegram.org/file/bot123/photo2.jpg"
  *                     - type: object
  *                       properties:
- *                         url:
+ *                         fileURL:
  *                           type: string
  *                           example: "https://api.telegram.org/file/bot123/photo2.jpg"
- *                 description: Array of images to delete (URLs, file_ids, or objects with url)
+ *                         file_id:
+ *                           type: string
+ *                           example: "XYZ789"
+ *                 description: Array of images to delete (URLs, file_ids, or objects with fileURL/file_id)
  *     responses:
  *       200:
  *         description: Product updated successfully

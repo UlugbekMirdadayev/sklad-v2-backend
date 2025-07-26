@@ -58,7 +58,7 @@ const productSchema = withBaseFields({
         },
         file_id: {
           type: String,
-          required: false, // Делаем поле необязательным
+          required: false,
           default: "",
         },
       },

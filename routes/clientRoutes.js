@@ -221,7 +221,12 @@ router.post(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { phone, password } = req.body;
+    let { phone, password } = req.body;
+    phone = phone.replace(/\s+/g, ""); // Удаляем пробелы из номера телефона
+    phone = phone.replace(/\D/g, ""); // Удаляем все нецифровые символы
+    if (!phone.startsWith("998")) {
+      phone = `998${phone}`;
+    }
     try {
       const client = await Client.findOne({ phone });
       if (!client) {

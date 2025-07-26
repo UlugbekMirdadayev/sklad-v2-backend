@@ -134,13 +134,17 @@ const productValidation = [
   body("oldImages")
     .optional()
     .custom((value) => {
-      // Если это строка (JSON массив URL-адресов)
+      // Если это строка (JSON массив URL-адресов или объектов)
       if (typeof value === "string") {
         try {
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) {
-            // Проверяем что все элементы - строки (URL или file_id)
-            return parsed.every((item) => typeof item === "string");
+            // Проверяем что все элементы - строки (URL или file_id) или объекты с url
+            return parsed.every((item) => {
+              // Поддерживаем как строки, так и объекты с полем url
+              return typeof item === "string" || 
+                     (typeof item === "object" && item !== null && typeof item.url === "string");
+            });
           }
           return false;
         } catch (e) {
@@ -149,23 +153,31 @@ const productValidation = [
       }
       // Если это массив
       if (Array.isArray(value)) {
-        return value.every((item) => typeof item === "string");
+        return value.every((item) => {
+          // Поддерживаем как строки, так и объекты с полем url
+          return typeof item === "string" || 
+                 (typeof item === "object" && item !== null && typeof item.url === "string");
+        });
       }
       return false;
     })
     .withMessage(
-      "Old images must be a JSON string array of URLs or array of strings"
+      "Old images must be a JSON string array of URLs/objects or array of strings/objects"
     ),
   body("deletedImages")
     .optional()
     .custom((value) => {
-      // Если это строка (JSON массив URL-адресов)
+      // Если это строка (JSON массив URL-адресов или объектов)
       if (typeof value === "string") {
         try {
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) {
-            // Проверяем что все элементы - строки (URL или file_id)
-            return parsed.every((item) => typeof item === "string");
+            // Проверяем что все элементы - строки (URL или file_id) или объекты с url
+            return parsed.every((item) => {
+              // Поддерживаем как строки, так и объекты с полем url
+              return typeof item === "string" || 
+                     (typeof item === "object" && item !== null && typeof item.url === "string");
+            });
           }
           return false;
         } catch (e) {
@@ -174,12 +186,16 @@ const productValidation = [
       }
       // Если это массив
       if (Array.isArray(value)) {
-        return value.every((item) => typeof item === "string");
+        return value.every((item) => {
+          // Поддерживаем как строки, так и объекты с полем url
+          return typeof item === "string" || 
+                 (typeof item === "object" && item !== null && typeof item.url === "string");
+        });
       }
       return false;
     })
     .withMessage(
-      "Deleted images must be a JSON string array of URLs or array of strings"
+      "Deleted images must be a JSON string array of URLs/objects or array of strings/objects"
     ),
   body("discount")
     .optional()
@@ -245,7 +261,7 @@ router.post(
         // Если передаются уже существующие file_id, преобразуем в нужный формат
         if (typeof req.body.images === "string") {
           if (isURL(req.body.images)) {
-            images = [{ file_id: null, fileURL: req.body.images }];
+            images = [{ file_id: "", fileURL: req.body.images }];
           } else if (isValidFileId(req.body.images)) {
             const fileURL = await getFileUrlFromTelegram(req.body.images);
             images = [{ file_id: req.body.images, fileURL }];
@@ -253,7 +269,7 @@ router.post(
         } else if (Array.isArray(req.body.images)) {
           const imagePromises = req.body.images.map(async (item) => {
             if (isURL(item)) {
-              return { file_id: null, fileURL: item };
+              return { file_id: "", fileURL: item };
             } else if (isValidFileId(item)) {
               const fileURL = await getFileUrlFromTelegram(item);
               return { file_id: item, fileURL };
@@ -403,31 +419,47 @@ router.patch(
           oldImages = req.body.oldImages;
         }
 
-        // Добавляем старые изображения (теперь это URL-адреса)
-        for (const oldImgUrl of oldImages) {
-          if (typeof oldImgUrl === "string" && isURL(oldImgUrl)) {
-            finalImages.push({ file_id: null, fileURL: oldImgUrl });
-          } else if (
-            typeof oldImgUrl === "string" &&
-            isValidFileId(oldImgUrl)
-          ) {
-            // На случай если все-таки передали file_id
+        // Добавляем старые изображения (URL-адреса, file_id или объекты)
+        for (const oldImg of oldImages) {
+          if (typeof oldImg === "string" && isURL(oldImg)) {
+            // Строка с URL
+            finalImages.push({ file_id: "", fileURL: oldImg });
+          } else if (typeof oldImg === "string" && isValidFileId(oldImg)) {
+            // Строка с file_id
             try {
-              const fileURL = await getFileUrlFromTelegram(oldImgUrl);
-              finalImages.push({ file_id: oldImgUrl, fileURL });
+              const fileURL = await getFileUrlFromTelegram(oldImg);
+              finalImages.push({ file_id: oldImg, fileURL });
             } catch (error) {
               console.warn(
-                `Не удалось получить URL для старого file_id ${oldImgUrl}:`,
+                `Не удалось получить URL для старого file_id ${oldImg}:`,
                 error.message
               );
             }
-          } else if (
-            oldImgUrl &&
-            typeof oldImgUrl === "object" &&
-            oldImgUrl.fileURL
-          ) {
-            // На случай если передали объект
-            finalImages.push(oldImgUrl);
+          } else if (oldImg && typeof oldImg === "object") {
+            // Объект с данными изображения
+            if (oldImg.url && typeof oldImg.url === "string" && isURL(oldImg.url)) {
+              // Объект с полем url
+              finalImages.push({ file_id: "", fileURL: oldImg.url });
+            } else if (oldImg.file_id && typeof oldImg.file_id === "string" && isValidFileId(oldImg.file_id)) {
+              // Объект с полем file_id
+              try {
+                const fileURL = await getFileUrlFromTelegram(oldImg.file_id);
+                finalImages.push({ file_id: oldImg.file_id, fileURL });
+              } catch (error) {
+                console.warn(
+                  `Не удалось получить URL для старого file_id ${oldImg.file_id}:`,
+                  error.message
+                );
+              }
+            } else if (oldImg.fileURL && typeof oldImg.fileURL === "string") {
+              // Объект уже в правильном формате
+              // Убеждаемся что file_id не null
+              const imageToAdd = { ...oldImg };
+              if (!imageToAdd.file_id) {
+                imageToAdd.file_id = "";
+              }
+              finalImages.push(imageToAdd);
+            }
           }
         }
       }
@@ -729,7 +761,7 @@ module.exports = router;
  *                 description: Direct URL to the image from Telegram
  *               file_id:
  *                 type: string
- *                 description: Telegram file_id of uploaded image
+ *                 description: Telegram file_id of uploaded image (empty string for direct URLs)
  *           description: Array of image objects with file_id and fileURL
  *         unit:
  *           type: string
@@ -917,12 +949,12 @@ module.exports = router;
  *           description: New image files to upload (max 10 files, 20MB each)
  *         oldImages:
  *           type: string
- *           description: JSON string array of existing images to keep
- *           example: '[{"file_id":"ABC123","fileURL":"https://example.com/img1.jpg"}]'
+ *           description: JSON string array of existing images to keep (URLs, file_ids, or objects with url field)
+ *           example: '[{"url":"https://example.com/img1.jpg"}, "https://example.com/img2.jpg", "file_id_123"]'
  *         deletedImages:
  *           type: string
- *           description: JSON string array of images to delete
- *           example: '[{"file_id":"XYZ789","fileURL":"https://example.com/img2.jpg"}]'
+ *           description: JSON string array of images to delete (URLs, file_ids, or objects with url field)
+ *           example: '[{"url":"https://example.com/img3.jpg"}, "file_id_456"]'
  *         unit:
  *           type: string
  *           description: Unit of measurement
@@ -1201,8 +1233,8 @@ module.exports = router;
  *             costPrice: 55000
  *             salePrice: 80000
  *             newImages: ["binary file 1", "binary file 2"]
- *             oldImages: '[{"file_id":"ABC123","fileURL":"https://api.telegram.org/file/bot123/photo1.jpg"}]'
- *             deletedImages: '[{"file_id":"XYZ789","fileURL":"https://api.telegram.org/file/bot123/photo2.jpg"}]'
+ *             oldImages: '[{"url":"https://api.telegram.org/file/bot123/photo1.jpg"}, "file_id_123"]'
+ *             deletedImages: '[{"url":"https://api.telegram.org/file/bot123/photo2.jpg"}]'
  *         application/json:
  *           schema:
  *             type: object
@@ -1219,27 +1251,27 @@ module.exports = router;
  *               oldImages:
  *                 type: array
  *                 items:
- *                   type: object
- *                   properties:
- *                     file_id:
- *                       type: string
- *                       example: "ABC123"
- *                     fileURL:
- *                       type: string
+ *                   oneOf:
+ *                     - type: string
  *                       example: "https://api.telegram.org/file/bot123/photo1.jpg"
- *                 description: Array of existing images to keep
+ *                     - type: object
+ *                       properties:
+ *                         url:
+ *                           type: string
+ *                           example: "https://api.telegram.org/file/bot123/photo1.jpg"
+ *                 description: Array of existing images to keep (URLs, file_ids, or objects with url)
  *               deletedImages:
  *                 type: array
  *                 items:
- *                   type: object
- *                   properties:
- *                     file_id:
- *                       type: string
- *                       example: "XYZ789"
- *                     fileURL:
- *                       type: string
+ *                   oneOf:
+ *                     - type: string
  *                       example: "https://api.telegram.org/file/bot123/photo2.jpg"
- *                 description: Array of images to delete (for logging purposes)
+ *                     - type: object
+ *                       properties:
+ *                         url:
+ *                           type: string
+ *                           example: "https://api.telegram.org/file/bot123/photo2.jpg"
+ *                 description: Array of images to delete (URLs, file_ids, or objects with url)
  *     responses:
  *       200:
  *         description: Product updated successfully

@@ -345,7 +345,28 @@ router.get("/", async (req, res) => {
       search,
       batch_number,
       isAvailable,
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt",
+      sortOrder = "desc",
     } = req.query;
+
+    // Преобразуем параметры пагинации в числа
+    const pageNumber = Math.max(1, parseInt(page));
+    const limitNumber = Math.max(1, Math.min(100, parseInt(limit))); // Максимум 100 элементов на страницу
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Валидация sortBy параметра
+    const allowedSortFields = [
+      "name",
+      "costPrice",
+      "salePrice",
+      "quantity",
+      "createdAt",
+      "updatedAt",
+    ];
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+    const sortDirection = sortOrder.toLowerCase() === "asc" ? 1 : -1;
 
     const query = { isDeleted: false };
     if (name) query.name = { $regex: name, $options: "i" };
@@ -365,11 +386,18 @@ router.get("/", async (req, res) => {
       query.isAvailable = isAvailable === "true";
     }
     if (search) query.name = { $regex: search, $options: "i" };
+
+    // Получаем общее количество документов для пагинации
+    const totalCount = await Product.countDocuments(query);
+    const totalPages = Math.ceil(totalCount / limitNumber);
+
     const products = await Product.find(query)
       .populate("createdBy", "-password")
       .populate("branch")
       .populate("batch_number")
-      .sort({ createdAt: -1 });
+      .sort({ [sortField]: sortDirection })
+      .skip(skip)
+      .limit(limitNumber);
 
     // Обновляем fileURL для всех продуктов
     const updatedProducts = await Promise.all(
@@ -378,7 +406,24 @@ router.get("/", async (req, res) => {
       })
     );
 
-    res.json(updatedProducts);
+    // Возвращаем данные с метаинформацией о пагинации
+    res.json({
+      data: updatedProducts,
+      pagination: {
+        currentPage: pageNumber,
+        totalPages,
+        totalCount,
+        limit: limitNumber,
+        hasNextPage: pageNumber < totalPages,
+        hasPrevPage: pageNumber > 1,
+        nextPage: pageNumber < totalPages ? pageNumber + 1 : null,
+        prevPage: pageNumber > 1 ? pageNumber - 1 : null,
+      },
+      sorting: {
+        sortBy: sortField,
+        sortOrder: sortDirection === 1 ? "asc" : "desc",
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -685,7 +730,30 @@ router.delete("/:id/images/:fileId", authMiddleware, async (req, res) => {
 router.get("/search/:query", async (req, res) => {
   try {
     const { query } = req.params;
-    const { isAvailable } = req.query;
+    const {
+      isAvailable,
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
+
+    // Преобразуем параметры пагинации в числа
+    const pageNumber = Math.max(1, parseInt(page));
+    const limitNumber = Math.max(1, Math.min(50, parseInt(limit))); // Максимум 50 элементов для поиска
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Валидация sortBy параметра
+    const allowedSortFields = [
+      "name",
+      "costPrice",
+      "salePrice",
+      "quantity",
+      "createdAt",
+      "updatedAt",
+    ];
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+    const sortDirection = sortOrder.toLowerCase() === "asc" ? 1 : -1;
 
     const searchQuery = {
       name: { $regex: query, $options: "i" },
@@ -696,11 +764,17 @@ router.get("/search/:query", async (req, res) => {
       searchQuery.isAvailable = isAvailable === "true";
     }
 
+    // Получаем общее количество документов для пагинации
+    const totalCount = await Product.countDocuments(searchQuery);
+    const totalPages = Math.ceil(totalCount / limitNumber);
+
     const products = await Product.find(searchQuery)
       .populate("createdBy", "-password")
       .populate("branch")
       .populate("batch_number")
-      .limit(10);
+      .sort({ [sortField]: sortDirection })
+      .skip(skip)
+      .limit(limitNumber);
 
     // Обновляем fileURL для всех найденных продуктов
     const updatedProducts = await Promise.all(
@@ -709,7 +783,24 @@ router.get("/search/:query", async (req, res) => {
       })
     );
 
-    res.json(updatedProducts);
+    res.json({
+      data: updatedProducts,
+      pagination: {
+        currentPage: pageNumber,
+        totalPages,
+        totalCount,
+        limit: limitNumber,
+        hasNextPage: pageNumber < totalPages,
+        hasPrevPage: pageNumber > 1,
+        nextPage: pageNumber < totalPages ? pageNumber + 1 : null,
+        prevPage: pageNumber > 1 ? pageNumber - 1 : null,
+      },
+      sorting: {
+        sortBy: sortField,
+        sortOrder: sortDirection === 1 ? "asc" : "desc",
+      },
+      searchQuery: query,
+    });
   } catch (error) {
     console.error("Error searching products:", error);
     res.status(500).json({ message: error.message });
@@ -1205,15 +1296,85 @@ module.exports = router;
  *         schema:
  *           type: boolean
  *         description: Filter by product availability
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *         description: Number of items per page (max 100)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [name, costPrice, salePrice, quantity, createdAt, updatedAt]
+ *           default: createdAt
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
  *     responses:
  *       200:
- *         description: List of products
+ *         description: Paginated list of products
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Product'
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Product'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     currentPage:
+ *                       type: integer
+ *                       example: 1
+ *                     totalPages:
+ *                       type: integer
+ *                       example: 5
+ *                     totalCount:
+ *                       type: integer
+ *                       example: 50
+ *                     limit:
+ *                       type: integer
+ *                       example: 10
+ *                     hasNextPage:
+ *                       type: boolean
+ *                       example: true
+ *                     hasPrevPage:
+ *                       type: boolean
+ *                       example: false
+ *                     nextPage:
+ *                       type: integer
+ *                       nullable: true
+ *                       example: 2
+ *                     prevPage:
+ *                       type: integer
+ *                       nullable: true
+ *                       example: null
+ *                 sorting:
+ *                   type: object
+ *                   properties:
+ *                     sortBy:
+ *                       type: string
+ *                       example: "createdAt"
+ *                     sortOrder:
+ *                       type: string
+ *                       example: "desc"
  *       500:
  *         description: Internal server error
  */
@@ -1376,15 +1537,89 @@ module.exports = router;
  *         schema:
  *           type: boolean
  *         description: Filter by product availability
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *         description: Number of items per page (max 50 for search)
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [name, costPrice, salePrice, quantity, createdAt, updatedAt]
+ *           default: createdAt
+ *         description: Field to sort by
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
  *     responses:
  *       200:
- *         description: Search results (limited to 10)
+ *         description: Paginated search results
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Product'
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Product'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     currentPage:
+ *                       type: integer
+ *                       example: 1
+ *                     totalPages:
+ *                       type: integer
+ *                       example: 3
+ *                     totalCount:
+ *                       type: integer
+ *                       example: 25
+ *                     limit:
+ *                       type: integer
+ *                       example: 10
+ *                     hasNextPage:
+ *                       type: boolean
+ *                       example: true
+ *                     hasPrevPage:
+ *                       type: boolean
+ *                       example: false
+ *                     nextPage:
+ *                       type: integer
+ *                       nullable: true
+ *                       example: 2
+ *                     prevPage:
+ *                       type: integer
+ *                       nullable: true
+ *                       example: null
+ *                 sorting:
+ *                   type: object
+ *                   properties:
+ *                     sortBy:
+ *                       type: string
+ *                       example: "createdAt"
+ *                     sortOrder:
+ *                       type: string
+ *                       example: "desc"
+ *                 searchQuery:
+ *                   type: string
+ *                   example: "motor oil"
+ *                   description: The search query that was used
  *       500:
  *         description: Internal server error
  */

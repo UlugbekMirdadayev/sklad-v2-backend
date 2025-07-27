@@ -400,7 +400,10 @@ router.post("/", orderValidation, async (req, res) => {
         createdBy: req.user?.id || null,
       });
     } catch (transactionError) {
-      console.error("Transaction yaratishda xatolik:", transactionError.message);
+      console.error(
+        "Transaction yaratishda xatolik:",
+        transactionError.message
+      );
     }
 
     // Telegramga xabar yuborish

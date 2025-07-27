@@ -297,10 +297,11 @@ router.get("/summary", async (req, res) => {
         isDeleted: { $ne: true },
       }),
 
-      // Кам қолган махсулотлар
-      Product.find({ quantity: { $lt: 5 }, isDeleted: { $ne: true } }).select(
-        "name quantity"
-      ),
+      // Кам қолган махсулотлар 10 та
+      Product.find({ quantity: { $lt: 5 }, isDeleted: { $ne: true } })
+        .select("name quantity")
+        .sort({ quantity: 1 })
+        .limit(20),
 
       // Хизматлар тури бўйича
       Service.aggregate([

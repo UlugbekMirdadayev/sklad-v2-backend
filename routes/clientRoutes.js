@@ -405,6 +405,7 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
       "isVip",
       "notes",
       "cars",
+      "debt",
     ];
 
     allowedFields.forEach((field) => {

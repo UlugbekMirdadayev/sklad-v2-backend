@@ -216,6 +216,13 @@ router.post("/send", authMiddleware, smsValidation, async (req, res) => {
     // SMS jo'natish
     const result = await sendSMS(phone, message, from);
 
+    if (result.response?.data.message) {
+      return res.status(400).json({
+        message: result.response.data.message,
+        error: result.response.data.error,
+      });
+    }
+
     // Ma'lumotlarni bazaga saqlash
     const smsRecord = new SMS({
       phone: result.phone || phone,

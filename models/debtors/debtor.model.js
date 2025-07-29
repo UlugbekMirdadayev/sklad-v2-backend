@@ -79,6 +79,7 @@ debtorSchema.pre("save", function (next) {
   } else {
     this.status = "pending";
   }
+  this.updatedAt = new Date();
 
   next();
 });

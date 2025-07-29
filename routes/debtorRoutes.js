@@ -187,7 +187,7 @@ router.post("/", authMiddleware, debtorValidation, async (req, res) => {
         type: "debt-created",
         amount: currentDebt,
         paymentType: "debt",
-        description: `Qarzdor yaratildi - ${description || 'Yangi qarz'}`,
+        description: `Qarzdor yaratildi - ${description || "Yangi qarz"}`,
         relatedModel: "Debtor",
         relatedId: debtor._id,
         client: client,
@@ -195,21 +195,24 @@ router.post("/", authMiddleware, debtorValidation, async (req, res) => {
         createdBy: req.user?.id || null,
       });
     } catch (transactionError) {
-      console.error("Transaction yaratishda xatolik:", transactionError.message);
+      console.error(
+        "Transaction yaratishda xatolik:",
+        transactionError.message
+      );
     }
 
     // Mijozning umumiy qarzini yangilash
     const clientDoc = await Client.findById(client);
     if (clientDoc) {
       // Agar debt raqam bo'lsa, objektga aylantirish
-      if (typeof clientDoc.debt === 'number') {
+      if (typeof clientDoc.debt === "number") {
         clientDoc.debt = { usd: 0, uzs: clientDoc.debt || 0 };
       }
       // Agar debt null yoki undefined bo'lsa, yangi objekt yaratish
-      if (!clientDoc.debt || typeof clientDoc.debt !== 'object') {
+      if (!clientDoc.debt || typeof clientDoc.debt !== "object") {
         clientDoc.debt = { usd: 0, uzs: 0 };
       }
-      
+
       clientDoc.debt.usd = (clientDoc.debt.usd || 0) + (currentDebt.usd || 0);
       clientDoc.debt.uzs = (clientDoc.debt.uzs || 0) + (currentDebt.uzs || 0);
       await clientDoc.save();
@@ -492,21 +495,24 @@ router.post("/:id/payment", authMiddleware, async (req, res) => {
         createdBy: req.user?.id || null,
       });
     } catch (transactionError) {
-      console.error("Transaction yaratishda xatolik:", transactionError.message);
+      console.error(
+        "Transaction yaratishda xatolik:",
+        transactionError.message
+      );
     }
 
     // Mijozning umumiy qarzini yangilash
     const client = await Client.findById(debtor.client);
     if (client) {
       // Agar debt raqam bo'lsa, objektga aylantirish
-      if (typeof client.debt === 'number') {
+      if (typeof client.debt === "number") {
         client.debt = { usd: 0, uzs: client.debt || 0 };
       }
       // Agar debt null yoki undefined bo'lsa, yangi objekt yaratish
-      if (!client.debt || typeof client.debt !== 'object') {
+      if (!client.debt || typeof client.debt !== "object") {
         client.debt = { usd: 0, uzs: 0 };
       }
-      
+
       client.debt.usd = (client.debt.usd || 0) - payment.usd;
       client.debt.uzs = (client.debt.uzs || 0) - payment.uzs;
       await client.save();
@@ -594,11 +600,12 @@ router.patch("/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Qarzdor topilmadi" });
     }
 
-    const { nextPayment, description } = req.body;
+    const { nextPayment, description, ...updates } = req.body;
 
     if (nextPayment) debtor.nextPayment = nextPayment;
     if (description !== undefined) debtor.description = description;
 
+    Object.assign(debtor, updates);
     await debtor.save();
 
     const updatedDebtor = await Debtor.findById(debtor._id).populate("client");
@@ -665,14 +672,14 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     const clientDoc = await Client.findById(debtor.client);
     if (clientDoc) {
       // Agar debt raqam bo'lsa, objektga aylantirish
-      if (typeof clientDoc.debt === 'number') {
+      if (typeof clientDoc.debt === "number") {
         clientDoc.debt = { usd: 0, uzs: clientDoc.debt || 0 };
       }
       // Agar debt null yoki undefined bo'lsa, yangi objekt yaratish
-      if (!clientDoc.debt || typeof clientDoc.debt !== 'object') {
+      if (!clientDoc.debt || typeof clientDoc.debt !== "object") {
         clientDoc.debt = { usd: 0, uzs: 0 };
       }
-      
+
       clientDoc.debt.usd = (clientDoc.debt.usd || 0) - debtor.currentDebt.usd;
       clientDoc.debt.uzs = (clientDoc.debt.uzs || 0) - debtor.currentDebt.uzs;
       await clientDoc.save();

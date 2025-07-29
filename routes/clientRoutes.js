@@ -432,7 +432,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     if (client.isDeleted) {
       return res.status(400).json({ message: "Клиент уже удален" });
     }
-
+    client.phone = client._id; // Удаляем телефон для безопасности
     client.isDeleted = true; // Помечаем клиента как удаленного
     client.deletedAt = new Date(); // Устанавливаем дату удаления
     await client.save();

@@ -129,20 +129,22 @@ router.post("/", async (req, res) => {
     const service = new Service({
       ...req.body,
       car: {
-        model: req.body.newCarModel,
-        plateNumber: req.body.newCarPlate,
+        model: req.body.newCarModel || req.body.car?.model,
+        plateNumber: req.body.newCarPlate || req.body.car?.plateNumber,
       },
       products,
     });
     await service.save();
-    
+
     // Transaction yaratish
     try {
       await Transaction.create({
         type: "service",
         amount: service.totalPrice || { usd: 0, uzs: 0 },
         paymentType: "cash", // Default, kerak bo'lsa req.body'dan olish mumkin
-        description: `Service #${service._id} - ${service.serviceType || 'Xizmat'}`,
+        description: `Service #${service._id} - ${
+          service.serviceType || "Xizmat"
+        }`,
         relatedModel: "Service",
         relatedId: service._id,
         client: service.client || null,
@@ -150,9 +152,12 @@ router.post("/", async (req, res) => {
         createdBy: service.createdBy || null,
       });
     } catch (transactionError) {
-      console.error("Transaction yaratishda xatolik:", transactionError.message);
+      console.error(
+        "Transaction yaratishda xatolik:",
+        transactionError.message
+      );
     }
-    
+
     await service.populate({ path: "products.product" });
     res.status(201).json(service);
   } catch (err) {

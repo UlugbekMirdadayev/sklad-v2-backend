@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Service = require("../models/services/service.model");
 const Transaction = require("../models/transactions/transaction.model");
-
+const Client = require("../models/clients/client.model");
 /**
  * @swagger
  * tags:

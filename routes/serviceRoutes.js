@@ -134,6 +134,14 @@ router.post("/", async (req, res) => {
         isDeleted: false,
       });
       serviceIndex = count + 1;
+
+      const client = await Client.findById(req.body.client);
+      if (!client) {
+        return res.status(404).json({ error: "Client not found" });
+      }
+      // Обновляем serviceIndex клиента
+      client.serviceIndex = serviceIndex;
+      await client.save();
     }
 
     const service = new Service({
@@ -143,7 +151,6 @@ router.post("/", async (req, res) => {
         plateNumber: req.body.newCarPlate || req.body.car?.plateNumber,
       },
       products,
-      serviceIndex, // добавляем поле
     });
     await service.save();
 

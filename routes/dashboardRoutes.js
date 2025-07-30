@@ -365,6 +365,44 @@ router.get("/summary", async (req, res) => {
       uzs: totalDebtsAgg[0]?.totalUzs || 0,
     };
 
+    // Получаем список VIP клиентов
+    const vipClients = await Client.find({ isVip: true }).select("_id");
+    const vipClientIds = vipClients.map(c => c._id);
+
+    // Долги VIP клиентов
+    const vipDebtsAgg = await Debtor.aggregate([
+      { $match: { isDeleted: { $ne: true }, client: { $in: vipClientIds } } },
+      {
+        $group: {
+          _id: null,
+          totalUsd: { $sum: "$currentDebt.usd" },
+          totalUzs: { $sum: "$currentDebt.uzs" },
+        },
+      },
+    ]);
+
+    // Долги обычных клиентов
+    const regularDebtsAgg = await Debtor.aggregate([
+      { $match: { isDeleted: { $ne: true }, client: { $nin: vipClientIds } } },
+      {
+        $group: {
+          _id: null,
+          totalUsd: { $sum: "$currentDebt.usd" },
+          totalUzs: { $sum: "$currentDebt.uzs" },
+        },
+      },
+    ]);
+
+    // Долги VIP и обычных клиентов
+    const vipDebts = {
+      usd: vipDebtsAgg[0]?.totalUsd || 0,
+      uzs: vipDebtsAgg[0]?.totalUzs || 0,
+    };
+    const regularDebts = {
+      usd: regularDebtsAgg[0]?.totalUsd || 0,
+      uzs: regularDebtsAgg[0]?.totalUzs || 0,
+    };
+
     // Буонги хизматлар сони (Transaction'лардан)
     const todayServicesCount = await Transaction.countDocuments({
       createdAt: { $gte: today, $lt: tomorrow },
@@ -403,6 +441,8 @@ router.get("/summary", async (req, res) => {
       lowStockProducts,
       productCapital,
       totalDebts,
+      vipDebts,        // добавлено
+      regularDebts,    // добавлено
       newClientsCount,
       totalClientsCount,
       totalDebtorsCount,

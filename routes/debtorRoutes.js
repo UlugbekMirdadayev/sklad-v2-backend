@@ -275,7 +275,7 @@ router.post("/", authMiddleware, debtorValidation, async (req, res) => {
 // GET /debtors - Qarzdorlar ro'yxati
 router.get("/", async (req, res) => {
   try {
-    const { client, status, startDate, endDate } = req.query;
+    const { client, status, startDate, endDate, isVipClients } = req.query;
 
     let query = { isDeleted: false };
     if (client) query.client = client;
@@ -284,6 +284,14 @@ router.get("/", async (req, res) => {
       query.createdAt = {};
       if (startDate) query.createdAt.$gte = new Date(startDate);
       if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    if ([true, "true", false, "false"].includes(isVipClients)) {
+      const vipClients = await Client.find({
+        isVip: Boolean(isVipClients),
+      }).select("_id");
+      const vipClientIds = vipClients.map((c) => c._id);
+      query.client = { $in: vipClientIds };
     }
 
     const debtors = await Debtor.find(query)
@@ -491,7 +499,7 @@ router.post("/:id/payment", authMiddleware, async (req, res) => {
         relatedModel: "Debtor",
         relatedId: debtor._id,
         client: debtor.client,
-        branch: null, // Kerak bo'lsa req.body'dan olish mumkin
+        branch: null, // Kerak bo'lsa.req.body'dan olish mumkin
         createdBy: req.user?.id || null,
       });
     } catch (transactionError) {
@@ -668,7 +676,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "Qarzdor topilmadi" });
     }
 
-    // Mijozning umumiy qarzидан айириш
+    // Mijozning umumiy qarzidan айириш
     const clientDoc = await Client.findById(debtor.client);
     if (clientDoc) {
       // Agar debt raqam bo'lsa, objektga aylantirish

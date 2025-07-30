@@ -353,7 +353,13 @@ router.get("/", async (req, res) => {
 
     // Преобразуем параметры пагинации в числа
     const pageNumber = Math.max(1, parseInt(page));
-    const limitNumber = Math.max(1, Math.min(100, parseInt(limit))); // Максимум 100 элементов на страницу
+    const limitNumber = Math.max(
+      1,
+      Math.min(
+        await Product.countDocuments({ isDeleted: false }),
+        parseInt(limit)
+      )
+    ); // Максимум 100 элементов на страницу
     const skip = (pageNumber - 1) * limitNumber;
 
     // Валидация sortBy параметра

@@ -667,7 +667,6 @@ async function getTotalsByDispatch(dispatchId, status = "", isAd = "") {
 async function testConnection() {
   try {
     await getBalance();
-    console.log("Eskiz SMS: Соединение работает корректно");
     return true;
   } catch (error) {
     console.error("Eskiz SMS: Ошибка соединения:", error.message);

@@ -126,8 +126,8 @@ router.post("/", async (req, res) => {
       quantity: i.quantity,
     }));
 
-    // Получаем порядковый номер услуги для клиента
     let serviceIndex = 1;
+    let visitIndex = 1;
     if (req.body.client) {
       const count = await Service.countDocuments({
         client: req.body.client,
@@ -141,6 +141,11 @@ router.post("/", async (req, res) => {
       }
       // Обновляем serviceIndex клиента
       client.serviceIndex = serviceIndex;
+
+      // Увеличиваем и сохраняем visitIndex клиента
+      client.visitIndex = (client.visitIndex || 0) + 1;
+      visitIndex = client.visitIndex;
+
       await client.save();
     }
 
@@ -151,6 +156,8 @@ router.post("/", async (req, res) => {
         plateNumber: req.body.newCarPlate || req.body.car?.plateNumber,
       },
       products,
+      serviceIndex,
+      visitIndex, // сохраняем номер визита клиента в услуге
     });
     await service.save();
 
@@ -301,4 +308,5 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+module.exports = router;
 module.exports = router;

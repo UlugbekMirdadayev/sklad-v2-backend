@@ -54,7 +54,7 @@ const clientSchema = withBaseFields({
     type: String,
     default: "123456",
   },
-  serviceIndex: {
+  visitIndex: {
     type: Number,
     default: 0,
   },

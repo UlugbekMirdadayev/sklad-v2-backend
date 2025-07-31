@@ -77,6 +77,11 @@ const serviceSchema = withBaseFields({
     required: true,
     index: true,
   },
+  serviceIndex: {
+    type: Number,
+    default: 1,
+    min: 1,
+  },
   car: {
     model: {
       type: mongoose.Schema.Types.ObjectId,
@@ -112,6 +117,7 @@ serviceSchema.pre("save", function (next) {
       0
     );
   }
+
   this.totalPrice = servicesTotal + productsTotal;
   next();
 });

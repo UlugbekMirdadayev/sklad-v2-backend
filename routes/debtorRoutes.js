@@ -616,6 +616,22 @@ router.patch("/:id", authMiddleware, async (req, res) => {
     Object.assign(debtor, updates);
     await debtor.save();
 
+    // --- Обновляем долг клиента ---
+    const clientId = debtor.client;
+    if (clientId) {
+      // Суммируем все активные долги клиента
+      const allDebts = await Debtor.find({ client: clientId, isDeleted: false });
+      let totalUsd = 0, totalUzs = 0;
+      for (const d of allDebts) {
+        totalUsd += d.currentDebt.usd || 0;
+        totalUzs += d.currentDebt.uzs || 0;
+      }
+      await Client.findByIdAndUpdate(clientId, {
+        $set: { "debt.usd": totalUsd, "debt.uzs": totalUzs }
+      });
+    }
+    // --- конец обновления ---
+
     const updatedDebtor = await Debtor.findById(debtor._id).populate("client");
     res.json(updatedDebtor);
   } catch (error) {
@@ -691,6 +707,12 @@ router.delete("/:id", authMiddleware, async (req, res) => {
       clientDoc.debt.usd = (clientDoc.debt.usd || 0) - debtor.currentDebt.usd;
       clientDoc.debt.uzs = (clientDoc.debt.uzs || 0) - debtor.currentDebt.uzs;
       await clientDoc.save();
+
+      // --- debtni 0 ga o'rnatish ---
+      await Client.findByIdAndUpdate(debtor.client, {
+        $set: { "debt.usd": 0, "debt.uzs": 0 }
+      });
+      // --- end ---
     }
 
     // Soft delete

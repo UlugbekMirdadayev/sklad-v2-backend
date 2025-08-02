@@ -184,7 +184,12 @@ const clientValidation = [
     .optional({ nullable: true })
     .notEmpty()
     .withMessage("Пароль обязателен"),
-  body("birthday").optional().isISO8601().withMessage("Неверный формат даты"),
+  body("birthday")
+    .optional({
+      nullable: true,
+    })
+    .isISO8601()
+    .withMessage("Неверный формат даты"),
   body("branch")
     .optional({ nullable: true })
     .isMongoId()

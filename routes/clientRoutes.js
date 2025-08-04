@@ -272,10 +272,10 @@ router.post("/", clientValidation, async (req, res) => {
     if (existing) {
       return res
         .status(400)
-        .json({ message: "Клиент с таким телефоном уже существует" });
+        .json({ message: "Bu telefon raqam bilan mijoz allaqachon mavjud" });
     }
     if (!password) {
-      return res.status(400).json({ message: "Пароль обязателен" });
+      return res.status(400).json({ message: "Parol majburiy" });
     }
     const hashedPassword = await bcrypt.hash(password, 10); // Обработка автомобилей
     const cars = req.body.cars || [];
@@ -284,7 +284,7 @@ router.post("/", clientValidation, async (req, res) => {
       const normalizedPlateNumber = car.plateNumber.toUpperCase().trim();
       if (plateNumbers.has(normalizedPlateNumber)) {
         return res.status(400).json({
-          message: `Дублирующийся номер автомобиля: ${normalizedPlateNumber}`,
+          message: `Avtomobil raqami takrorlanmoqda: ${normalizedPlateNumber}`,
         });
       }
       plateNumbers.add(normalizedPlateNumber);
@@ -303,7 +303,7 @@ router.post("/", clientValidation, async (req, res) => {
     await client.save();
     res.status(201).json(client);
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Serverda xatolik" });
   }
 });
 
@@ -337,7 +337,7 @@ router.get("/", async (req, res) => {
       .sort({ createdAt: -1 });
     res.json(clients);
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Serverda xatolik" });
   }
 });
 
@@ -348,16 +348,16 @@ router.get("/:id", async (req, res) => {
       "branch cars.model"
     );
     if (!client) {
-      return res.status(404).json({ message: "Клиент не найден" });
+      return res.status(404).json({ message: "Mijoz topilmadi" });
     }
 
     if (client.isDeleted) {
-      return res.status(400).json({ message: "Клиент уже удален" });
+      return res.status(400).json({ message: "Mijoz allaqachon o‘chirilgan" });
     }
 
     res.json(client);
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Serverda xatolik" });
   }
 });
 // Обновление клиента
@@ -374,7 +374,7 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
     }
 
     if (client.isDeleted) {
-      return res.status(400).json({ message: "Клиент уже удален" });
+      return res.status(400).json({ message: "Mijoz allaqachon o‘chirilgan" });
     }
 
     if (req.body.password) {
@@ -389,7 +389,7 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
         const normalizedPlate = car.plateNumber.toUpperCase().trim();
         if (plateNumbers.has(normalizedPlate)) {
           return res.status(400).json({
-            message: `Дублирующийся номер автомобиля: ${normalizedPlate}`,
+            message: `Avtomobil raqami takrorlanmoqda: ${normalizedPlate}`,
           });
         }
         plateNumbers.add(normalizedPlate);
@@ -423,7 +423,7 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
     res.json(client);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Serverda xatolik" });
   }
 });
 
@@ -432,18 +432,18 @@ router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const client = await Client.findById(req.params.id);
     if (!client) {
-      return res.status(404).json({ message: "Клиент не найден" });
+      return res.status(404).json({ message: "Mijoz topilmadi" });
     }
     if (client.isDeleted) {
-      return res.status(400).json({ message: "Клиент уже удален" });
+      return res.status(400).json({ message: "Mijoz allaqachon o‘chirilgan" });
     }
-    client.phone = client._id; // Удаляем телефон для безопасности
-    client.isDeleted = true; // Помечаем клиента как удаленного
-    client.deletedAt = new Date(); // Устанавливаем дату удаления
+    client.phone = client._id; // Ustidan telefon raqamini o‘chirib tashlash
+    client.isDeleted = true;
+    client.deletedAt = new Date();
     await client.save();
-    res.json({ message: "Клиент успешно удален" });
+    res.json({ message: "Mijoz muvaffaqiyatli o‘chirildi" });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Serverda xatolik" });
   }
 });
 

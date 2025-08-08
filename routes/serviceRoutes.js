@@ -159,6 +159,10 @@ router.post("/", async (req, res) => {
       serviceIndex,
       visitIndex, // сохраняем номер визита клиента в услуге
     });
+    service.car = {
+      model: req.body.newCarModel || req.body.car?.model,
+      plateNumber: req.body.newCarPlate || req.body.car?.plateNumber,
+    };
     await service.save();
 
     // Transaction yaratish

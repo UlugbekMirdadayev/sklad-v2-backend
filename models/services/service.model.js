@@ -86,13 +86,11 @@ const serviceSchema = withBaseFields({
     model: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Car",
-      trim: true,
-      maxlength: [100, "Car model cannot be longer than 100 characters"],
+      default: null,
     },
     plateNumber: {
       type: String,
-      trim: true,
-      maxlength: [20, "Plate number cannot be longer than 20 characters"],
+      default: null,
     },
   },
 });

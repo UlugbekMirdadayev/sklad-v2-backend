@@ -148,12 +148,18 @@ router.post("/", async (req, res) => {
 
     // car всегда объект, даже если пустой
     const car = {
-      model: req.body.newCarModel !== undefined
-        ? req.body.newCarModel
-        : (req.body.car?.model !== undefined ? req.body.car.model : null),
-      plateNumber: req.body.newCarPlate !== undefined
-        ? req.body.newCarPlate
-        : (req.body.car?.plateNumber !== undefined ? req.body.car.plateNumber : ""),
+      model:
+        req.body.newCarModel !== undefined
+          ? req.body.newCarModel
+          : req.body.car?.model !== undefined
+          ? req.body.car.model
+          : null,
+      plateNumber:
+        req.body.newCarPlate !== undefined
+          ? req.body.newCarPlate
+          : req.body.car?.plateNumber !== undefined
+          ? req.body.car.plateNumber
+          : "",
     };
 
     const service = new Service({

@@ -1,7 +1,9 @@
 const { withBaseFields } = require("../base.model");
 const mongoose = require("mongoose");
+const Counter = require("../сounter");
 
 const serviceSchema = withBaseFields({
+  _id: { type: Number },
   products: {
     type: [
       {
@@ -100,7 +102,7 @@ serviceSchema.index({ client: 1, status: 1 });
 serviceSchema.index({ branch: 1, status: 1 });
 
 // Add pre-save middleware to update totalPrice
-serviceSchema.pre("save", function (next) {
+serviceSchema.pre("save", async function (next) {
   let servicesTotal = 0;
   let productsTotal = 0;
   if (this.services && this.services.length > 0) {
@@ -115,7 +117,18 @@ serviceSchema.pre("save", function (next) {
       0
     );
   }
-
+  this.car = {
+    model: this.newCarModel || this.car?.model || null,
+    plateNumber: this.newCarPlate || this.car?.plateNumber || "",
+  };
+  if (this.isNew) {
+    const counter = await Counter.findByIdAndUpdate(
+      { _id: "serviceId" },
+      { $inc: { seq: 1 } },
+      { upsert: true, new: true }
+    );
+    this._id = counter.seq;
+  }
   this.totalPrice = servicesTotal + productsTotal;
   next();
 });

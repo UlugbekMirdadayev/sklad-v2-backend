@@ -139,30 +139,31 @@ router.post("/", async (req, res) => {
       if (!client) {
         return res.status(404).json({ error: "Client not found" });
       }
-      // Обновляем serviceIndex клиента
       client.serviceIndex = serviceIndex;
-
-      // Увеличиваем и сохраняем visitIndex клиента
       client.visitIndex = (client.visitIndex || 0) + 1;
       visitIndex = client.visitIndex;
 
       await client.save();
     }
 
+    // car всегда объект, даже если пустой
+    const car = {
+      model: req.body.newCarModel !== undefined
+        ? req.body.newCarModel
+        : (req.body.car?.model !== undefined ? req.body.car.model : null),
+      plateNumber: req.body.newCarPlate !== undefined
+        ? req.body.newCarPlate
+        : (req.body.car?.plateNumber !== undefined ? req.body.car.plateNumber : ""),
+    };
+
     const service = new Service({
       ...req.body,
-      car: {
-        model: req.body.newCarModel || req.body.car?.model,
-        plateNumber: req.body.newCarPlate || req.body.car?.plateNumber,
-      },
+      car,
       products,
       serviceIndex,
-      visitIndex, // сохраняем номер визита клиента в услуге
+      visitIndex,
     });
-    service.car = {
-      model: req.body.newCarModel || req.body.car?.model,
-      plateNumber: req.body.newCarPlate || req.body.car?.plateNumber,
-    };
+
     await service.save();
 
     // Transaction yaratish

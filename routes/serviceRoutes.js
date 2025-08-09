@@ -239,6 +239,7 @@ router.get("/", async (req, res) => {
     const sortField = ["totalPrice.usd", "totalPrice.uzs"].includes(sortBy)
       ? sortBy
       : sortBy;
+
     const services = await Service.find(query)
       .populate("branch createdBy client car.model products.product")
       .sort({ [sortField]: sortOrder === "desc" ? -1 : 1 })
@@ -247,8 +248,35 @@ router.get("/", async (req, res) => {
 
     const total = await Service.countDocuments(query);
 
+    // Har bir service uchun index hisoblash (kunlik nechanchi service)
+    // index = shu kundagi (createdAt bo'yicha) nechanchi service
+    const servicesWithIndex = await Promise.all(
+      services.map(async (service) => {
+        const startOfDay = new Date(service.createdAt);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(service.createdAt);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const dailyQuery = {
+          isDeleted: false,
+          createdAt: { $gte: startOfDay, $lte: service.createdAt },
+        };
+        if (branch) dailyQuery.branch = branch;
+        if (serviceType) dailyQuery.serviceType = serviceType;
+        if (priority) dailyQuery.priority = priority;
+
+        // Shu kunga oid va shu servicegacha bo'lganlar soni
+        const index = await Service.countDocuments(dailyQuery);
+
+        return {
+          ...service.toObject(),
+          index, // kunlik index
+        };
+      })
+    );
+
     res.json({
-      services,
+      services: servicesWithIndex,
       totalPages: Math.ceil(total / limit),
       currentPage: Number(page),
       total,
@@ -319,5 +347,4 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-module.exports = router;
 module.exports = router;

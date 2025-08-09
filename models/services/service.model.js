@@ -1,6 +1,5 @@
 const { withBaseFields } = require("../base.model");
 const mongoose = require("mongoose");
-const Counter = require("../сounter");
 
 const serviceSchema = withBaseFields({
   _id: { type: Number },
@@ -121,14 +120,7 @@ serviceSchema.pre("save", async function (next) {
     model: this.newCarModel || this.car?.model || null,
     plateNumber: this.newCarPlate || this.car?.plateNumber || "",
   };
-  if (this.isNew) {
-    const counter = await Counter.findByIdAndUpdate(
-      { _id: "serviceId" },
-      { $inc: { seq: 1 } },
-      { upsert: true, new: true }
-    );
-    this._id = counter.seq;
-  }
+
   this.totalPrice = servicesTotal + productsTotal;
   next();
 });

@@ -349,6 +349,7 @@ router.get("/", async (req, res) => {
       limit = 10,
       sortBy = "createdAt",
       sortOrder = "desc",
+      branch,
     } = req.query;
 
     // Преобразуем параметры пагинации в числа
@@ -392,6 +393,7 @@ router.get("/", async (req, res) => {
       query.isAvailable = isAvailable === "true";
     }
     if (search) query.name = { $regex: search, $options: "i" };
+    if (branch !== undefined) query.branch = branch;
 
     // Получаем общее количество документов для пагинации
     const totalCount = await Product.countDocuments(query);
@@ -770,7 +772,6 @@ router.get("/search/:query", async (req, res) => {
     if (isAvailable !== undefined) {
       searchQuery.isAvailable = isAvailable === "true";
     }
-
     if (branch !== undefined) {
       searchQuery.branch = branch;
     }

@@ -281,7 +281,7 @@ router.get("/summary", async (req, res) => {
 
     // Получаем список VIP клиентов
     const vipClients = await Client.find({ isVip: true }).select("_id");
-    const vipClientIds = vipClients.map(c => c._id);
+    const vipClientIds = vipClients.map((c) => c._id);
 
     // Параллел равишда бошқа маълумотларни олиш
     const [
@@ -289,24 +289,24 @@ router.get("/summary", async (req, res) => {
       lowStockProducts,
       servicesByType,
       latestServices,
-      
+
       // Мижозлар ҳақида маълумот
       totalVipClientsCount,
       totalRegularClientsCount,
       newVipClientsCount,
       newRegularClientsCount,
-      
+
       // Қарздорлар сони
       vipDebtorsCount,
       regularDebtorsCount,
-      
+
       // Қарз миқдори
       vipDebtsAgg,
       regularDebtsAgg,
-      
+
       // Маҳсулот капитали (филиаллар бўйича)
       productCapitalByBranchAgg,
-      
+
       // Буонги хизматлар сони
       todayServicesCount,
     ] = await Promise.all([
@@ -338,37 +338,37 @@ router.get("/summary", async (req, res) => {
 
       // VIP мижозлар сони
       Client.countDocuments({ isVip: true }),
-      
+
       // Оддий мижозлар сони
       Client.countDocuments({ isVip: { $ne: true } }),
-      
+
       // Бугунги VIP мижозлар сони
-      Client.countDocuments({ 
+      Client.countDocuments({
         isVip: true,
-        createdAt: { $gte: today, $lt: tomorrow } 
-      }),
-      
-      // Бугунги оддий мижозлар сони
-      Client.countDocuments({ 
-        isVip: { $ne: true },
-        createdAt: { $gte: today, $lt: tomorrow } 
-      }),
-      
-      // VIP қарздорлар сони
-      Debtor.countDocuments({ 
-        isDeleted: { $ne: true },
-        client: { $in: vipClientIds },
-        remainingDebt: { $gt: 0 }
-      }),
-      
-      // Оддий қарздорлар сони
-      Debtor.countDocuments({ 
-        isDeleted: { $ne: true },
-        client: { $nin: vipClientIds },
-        remainingDebt: { $gt: 0 }
+        createdAt: { $gte: today, $lt: tomorrow },
       }),
 
-      // VIP долги 
+      // Бугунги оддий мижозлар сони
+      Client.countDocuments({
+        isVip: { $ne: true },
+        createdAt: { $gte: today, $lt: tomorrow },
+      }),
+
+      // VIP қарздорлар сони
+      Debtor.countDocuments({
+        isDeleted: { $ne: true },
+        client: { $in: vipClientIds },
+        remainingDebt: { $gt: 0 },
+      }),
+
+      // Оддий қарздорлар сони
+      Debtor.countDocuments({
+        isDeleted: { $ne: true },
+        client: { $nin: vipClientIds },
+        remainingDebt: { $gt: 0 },
+      }),
+
+      // VIP долги
       Debtor.aggregate([
         { $match: { isDeleted: { $ne: true }, client: { $in: vipClientIds } } },
         {
@@ -382,7 +382,9 @@ router.get("/summary", async (req, res) => {
 
       // Долги обычных клиентов
       Debtor.aggregate([
-        { $match: { isDeleted: { $ne: true }, client: { $nin: vipClientIds } } },
+        {
+          $match: { isDeleted: { $ne: true }, client: { $nin: vipClientIds } },
+        },
         {
           $group: {
             _id: null,
@@ -391,7 +393,7 @@ router.get("/summary", async (req, res) => {
           },
         },
       ]),
-      
+
       // Маҳсулот капитали (филиаллар бўйича)
       Product.aggregate([
         { $match: { isDeleted: { $ne: true } } },
@@ -406,9 +408,9 @@ router.get("/summary", async (req, res) => {
             _id: 0,
             branch: "$_id.branch",
             currency: "$_id.currency",
-            capital: 1
-          }
-        }
+            capital: 1,
+          },
+        },
       ]),
 
       // Буонги хизматлар сони
@@ -416,28 +418,43 @@ router.get("/summary", async (req, res) => {
         createdAt: { $gte: today, $lt: tomorrow },
         type: "service",
         isDeleted: { $ne: true },
-      })
+      }),
     ]);
 
     // Маҳсулот капиталини филиаллар бўйича гуруҳлаш
-    const productCapitalByBranch = {};
+    const branchesMap = {
+      "6877dd28939ecd40fa5fc930": "Lola",
+      "6888ece4c7df5aa9cb6924a0": "Asosiy",
+    };
+
+    // Инициализируем объект для обоих филиалов с нулевыми значениями
+    const productCapitalByBranch = {
+      Lola: { usd: 0, uzs: 0 },
+      Asosiy: { usd: 0, uzs: 0 },
+    };
+
     for (const item of productCapitalByBranchAgg) {
-      const branchId = item.branch ? item.branch.toString() : 'unknown';
-      if (!productCapitalByBranch[branchId]) {
-        productCapitalByBranch[branchId] = { usd: 0, uzs: 0 };
-      }
+      const branchId = item.branch ? item.branch.toString() : "unknown";
+      const branchName = branchesMap[branchId] || "unknown";
+
       if (item.currency === "USD") {
-        productCapitalByBranch[branchId].usd += item.capital;
+        productCapitalByBranch[branchName].usd += item.capital;
       } else if (item.currency === "UZS") {
-        productCapitalByBranch[branchId].uzs += item.capital;
+        productCapitalByBranch[branchName].uzs += item.capital;
       }
     }
 
     // Умумий маҳсулот капитали
     const productCapital = {
-      usd: Object.values(productCapitalByBranch).reduce((sum, item) => sum + item.usd, 0),
-      uzs: Object.values(productCapitalByBranch).reduce((sum, item) => sum + item.uzs, 0),
-      byBranch: productCapitalByBranch
+      usd: Object.values(productCapitalByBranch).reduce(
+        (sum, item) => sum + item.usd,
+        0
+      ),
+      uzs: Object.values(productCapitalByBranch).reduce(
+        (sum, item) => sum + item.uzs,
+        0
+      ),
+      byBranch: productCapitalByBranch,
     };
 
     // Долги VIP и обычных клиентов
@@ -445,12 +462,12 @@ router.get("/summary", async (req, res) => {
       usd: vipDebtsAgg[0]?.totalUsd || 0,
       uzs: vipDebtsAgg[0]?.totalUzs || 0,
     };
-    
+
     const regularDebts = {
       usd: regularDebtsAgg[0]?.totalUsd || 0,
       uzs: regularDebtsAgg[0]?.totalUzs || 0,
     };
-    
+
     // Умумий қарзлар
     const totalDebts = {
       usd: vipDebts.usd + regularDebts.usd,
@@ -487,36 +504,36 @@ router.get("/summary", async (req, res) => {
       stockCount,
       lowStockProducts,
       productCapital,
-      
+
       // Мижозлар сони
       clients: {
         vip: {
           total: totalVipClientsCount,
-          new: newVipClientsCount
+          new: newVipClientsCount,
         },
         regular: {
           total: totalRegularClientsCount,
-          new: newRegularClientsCount
+          new: newRegularClientsCount,
         },
         total: totalVipClientsCount + totalRegularClientsCount,
-        new: newVipClientsCount + newRegularClientsCount
+        new: newVipClientsCount + newRegularClientsCount,
       },
-      
+
       // Қарздорлар
       debtors: {
         vip: {
           count: vipDebtorsCount,
-          amount: vipDebts
+          amount: vipDebts,
         },
         regular: {
           count: regularDebtorsCount,
-          amount: regularDebts
+          amount: regularDebts,
         },
         total: {
           count: vipDebtorsCount + regularDebtorsCount,
-          amount: totalDebts
-        }
-      }
+          amount: totalDebts,
+        },
+      },
     };
 
     const charts = {

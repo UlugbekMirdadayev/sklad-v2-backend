@@ -532,7 +532,32 @@ router.get("/", async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    res.json(orders);
+    // Har bir order uchun index hisoblash (kunlik nechanchi order)
+    const ordersWithIndex = await Promise.all(
+      orders.map(async (order) => {
+        const startOfDay = new Date(order.createdAt);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(order.createdAt);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const dailyQuery = {
+          isDeleted: false,
+          createdAt: { $gte: startOfDay, $lte: order.createdAt },
+        };
+        if (client) dailyQuery.client = client;
+        if (branch) dailyQuery.branch = branch;
+        if (date_returned) dailyQuery.date_returned = date_returned;
+
+        const index = await Order.countDocuments(dailyQuery);
+
+        return {
+          ...order.toObject(),
+          index, // kunlik index
+        };
+      })
+    );
+
+    res.json(ordersWithIndex);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

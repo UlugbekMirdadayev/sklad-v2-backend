@@ -768,6 +768,7 @@ router.get("/search/:query", async (req, res) => {
 
     if (isAvailable !== undefined) {
       searchQuery.isAvailable = isAvailable === "true";
+      searchQuery.branch = "6877dd28939ecd40fa5fc930";
     }
 
     // Получаем общее количество документов для пагинации

@@ -510,7 +510,7 @@ router.post("/", orderValidation, async (req, res) => {
 // GET /orders
 router.get("/", async (req, res) => {
   try {
-    const { client, branch, startDate, endDate, date_returned } = req.query;
+    const { client, branch, startDate, endDate, date_returned, page = 1, limit = 10 } = req.query;
     let query = { isDeleted: false };
     if (client) query.client = client;
     if (branch) query.branch = branch;
@@ -521,16 +521,23 @@ router.get("/", async (req, res) => {
       if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    const orders = await Order.find(query)
-      .populate("branch")
-      .populate("products.product")
-      .populate({
-        path: "client",
-        populate: {
-          path: "cars.model",
-        },
-      })
-      .sort({ createdAt: -1 });
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [orders, total] = await Promise.all([
+      Order.find(query)
+        .populate("branch")
+        .populate("products.product")
+        .populate({
+          path: "client",
+          populate: {
+            path: "cars.model",
+          },
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Order.countDocuments(query)
+    ]);
 
     // Har bir order uchun index hisoblash (kunlik nechanchi order)
     const ordersWithIndex = await Promise.all(
@@ -557,7 +564,12 @@ router.get("/", async (req, res) => {
       })
     );
 
-    res.json(ordersWithIndex);
+    res.json({
+      orders: ordersWithIndex,
+      totalPages: Math.ceil(total / limit),
+      currentPage: Number(page),
+      total,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

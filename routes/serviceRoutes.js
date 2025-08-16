@@ -3,6 +3,7 @@ const router = express.Router();
 const Service = require("../models/services/service.model");
 const Transaction = require("../models/transactions/transaction.model");
 const Client = require("../models/clients/client.model");
+const { emitNewService, emitServiceUpdate } = require("../utils/socketEvents");
 /**
  * @swagger
  * tags:
@@ -195,6 +196,13 @@ router.post("/", async (req, res) => {
     }
 
     await service.populate({ path: "products.product" });
+    
+    // Отправить Socket.IO событие о новой услуге
+    const io = req.app.get('io');
+    if (io) {
+      emitNewService(io, service);
+    }
+    
     res.status(201).json(service);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -323,6 +331,13 @@ router.put("/:id", async (req, res) => {
       }
     );
     if (!service) return res.status(404).json({ error: "Service not found" });
+    
+    // Отправить Socket.IO событие об обновлении услуги
+    const io = req.app.get('io');
+    if (io) {
+      emitServiceUpdate(io, service);
+    }
+    
     res.json(service);
   } catch (err) {
     res.status(400).json({ error: err.message });

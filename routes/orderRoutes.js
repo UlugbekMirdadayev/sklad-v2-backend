@@ -12,6 +12,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const TELEGRAM_TOKEN = "8178295781:AAHsA6ZRWFrYhXItqb1iPHskoJGweMoqk_I";
 const TELEGRAM_CHAT_ID = "-1002798343078"; // o'zingizning chat_id yoki group_id
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
+const { emitNewOrder, emitOrderUpdate } = require("../utils/socketEvents");
 
 // Order validation
 const orderValidation = [
@@ -501,6 +502,12 @@ router.post("/", orderValidation, async (req, res) => {
       }
     }
 
+    // Отправить Socket.IO событие о новом заказе
+    const io = req.app.get('io');
+    if (io) {
+      emitNewOrder(io, order);
+    }
+
     res.status(201).json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -885,6 +892,12 @@ router.patch(
 
       order.status = status;
       await order.save();
+
+      // Отправить Socket.IO событие об обновлении заказа
+      const io = req.app.get('io');
+      if (io) {
+        emitOrderUpdate(io, order);
+      }
 
       res.json(order);
     } catch (error) {

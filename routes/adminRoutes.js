@@ -103,7 +103,7 @@ router.post("/register", authMiddleware, adminValidation, async (req, res) => {
       password,
       fullName,
       branch,
-      role: ["admin", "superadmin","manager"].includes(role) ? role : "admin",
+      role: ["admin", "superadmin", "manager"].includes(role) ? role : "admin",
       isActive: true,
     });
 
@@ -273,7 +273,9 @@ router.get("/", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: "Ruxsat yo'q" });
     }
 
-    const admins = await Admin.find({isActive:true}).select("-password").populate("branch");
+    const admins = await Admin.find({ isActive: true })
+      .select("-password")
+      .populate("branch");
     res.json(admins);
   } catch (error) {
     res.status(500).json({ message: handleMongoError(error) });

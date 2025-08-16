@@ -3,8 +3,20 @@ const express = require("express");
 const connectDB = require("./config/db");
 const cors = require("cors");
 const http = require("http");
+const { Server } = require("socket.io");
 const app = express();
 const server = http.createServer(app);
+
+// Socket.IO setup with CORS
+const io = new Server(server, {
+  cors: {
+    origin: "*", // В продакшене укажите конкретные домены
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+  }
+});
+
+// Make io accessible to routes
+app.set('io', io);
 const { swaggerUi, swaggerSpec } = require("./swagger");
 const branchRoutes = require("./routes/branchRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -39,6 +51,20 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/debtors", debtorRoutes);
 app.use("/api/sms", smsRoutes);
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('Клиент подключился:', socket.id);
+  
+  socket.on('join_room', (room) => {
+    socket.join(room);
+    console.log(`Клиент ${socket.id} присоединился к комнате: ${room}`);
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('Клиент отключился:', socket.id);
+  });
+});
 
 // Handle 404 errors
 app.use((req, res) => {

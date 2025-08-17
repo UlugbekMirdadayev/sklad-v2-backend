@@ -23,7 +23,9 @@ const emitNewOrder = (io, order) => {
       status: order.status,
       profitAmount: order.profitAmount,
       createdAt: order.createdAt,
-      notes: order.notes
+      notes: order.notes,
+      car: order.car,
+      index: order.index
     });
 
     // Также отправить в комнату конкретного филиала, если филиал указан
@@ -40,7 +42,9 @@ const emitNewOrder = (io, order) => {
         status: order.status,
         profitAmount: order.profitAmount,
         createdAt: order.createdAt,
-        notes: order.notes
+        notes: order.notes,
+        car: order.car,
+        index: order.index
       });
     }
 
@@ -112,6 +116,8 @@ const emitOrderUpdate = (io, order) => {
       totalAmount: order.totalAmount,
       paidAmount: order.paidAmount,
       debtAmount: order.debtAmount,
+      car: order.car,
+      index: order.index,
       updatedAt: new Date()
     });
 
@@ -122,6 +128,8 @@ const emitOrderUpdate = (io, order) => {
         totalAmount: order.totalAmount,
         paidAmount: order.paidAmount,
         debtAmount: order.debtAmount,
+        car: order.car,
+        index: order.index,
         updatedAt: new Date()
       });
     }

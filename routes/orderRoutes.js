@@ -386,6 +386,13 @@ router.post("/", orderValidation, async (req, res) => {
       products,
     });
     await order.save();
+    
+    // Populate branch and products.product after saving
+    await order.populate([
+      { path: "branch" },
+      { path: "products.product" },
+      { path: "client" }
+    ]);
 
     // Transaction yaratish
     try {
@@ -503,9 +510,38 @@ router.post("/", orderValidation, async (req, res) => {
     }
 
     // Отправить Socket.IO событие о новом заказе
-    const io = req.app.get('io');
+    const io = req.app.get("io");
     if (io) {
-      emitNewOrder(io, order);
+      // Вычисляем индекс заказа для сегодняшнего дня
+      const startOfDay = new Date(order.createdAt);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const dailyQuery = {
+        isDeleted: false,
+        createdAt: { $gte: startOfDay, $lte: order.createdAt },
+      };
+      if (order.client) dailyQuery.client = order.client;
+      if (order.branch) dailyQuery.branch = order.branch;
+      
+      const index = await Order.countDocuments(dailyQuery);
+      
+      // Находим машину в массиве cars клиента
+      let carObject = {};
+      if (order.client && order.client.cars && order.car) {
+        const foundCar = order.client.cars.find(car => car._id.toString() === order.car);
+        if (foundCar) {
+          carObject = foundCar.toObject ? foundCar.toObject() : foundCar;
+        }
+      }
+      
+      // Добавляем индекс и объект машины к объекту заказа
+      const orderWithIndex = {
+        ...order.toObject(),
+        index,
+        car: carObject
+      };
+      
+      emitNewOrder(io, orderWithIndex);
     }
 
     res.status(201).json(order);
@@ -517,7 +553,15 @@ router.post("/", orderValidation, async (req, res) => {
 // GET /orders
 router.get("/", async (req, res) => {
   try {
-    const { client, branch, startDate, endDate, date_returned, page = 1, limit = 10 } = req.query;
+    const {
+      client,
+      branch,
+      startDate,
+      endDate,
+      date_returned,
+      page = 1,
+      limit = 10,
+    } = req.query;
     let query = { isDeleted: false };
     if (client) query.client = client;
     if (branch) query.branch = branch;
@@ -543,7 +587,7 @@ router.get("/", async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
-      Order.countDocuments(query)
+      Order.countDocuments(query),
     ]);
 
     // Har bir order uchun index hisoblash (kunlik nechanchi order)
@@ -564,9 +608,19 @@ router.get("/", async (req, res) => {
 
         const index = await Order.countDocuments(dailyQuery);
 
+        // Находим машину в массиве cars клиента
+        let carObject = {};
+        if (order.client && order.client.cars && order.car) {
+          const foundCar = order.client.cars.find(car => car._id.toString() === order.car);
+          if (foundCar) {
+            carObject = foundCar.toObject ? foundCar.toObject() : foundCar;
+          }
+        }
+
         return {
           ...order.toObject(),
           index, // kunlik index
+          car: carObject
         };
       })
     );
@@ -815,7 +869,7 @@ router.patch(
       if (!errors.isEmpty())
         return res.status(400).json({ errors: errors.array() });
 
-      const order = await Order.findById(req.params.id);
+      const order = await Order.findById(req.params.id).populate("client");
       if (!order) return res.status(404).json({ message: "Заказ не найден" });
 
       const oldStatus = order.status;
@@ -894,9 +948,38 @@ router.patch(
       await order.save();
 
       // Отправить Socket.IO событие об обновлении заказа
-      const io = req.app.get('io');
+      const io = req.app.get("io");
       if (io) {
-        emitOrderUpdate(io, order);
+        // Вычисляем индекс заказа для сегодняшнего дня
+        const startOfDay = new Date(order.createdAt);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const dailyQuery = {
+          isDeleted: false,
+          createdAt: { $gte: startOfDay, $lte: order.createdAt },
+        };
+        if (order.client) dailyQuery.client = order.client;
+        if (order.branch) dailyQuery.branch = order.branch;
+        
+        const index = await Order.countDocuments(dailyQuery);
+        
+        // Находим машину в массиве cars клиента
+        let carObject = {};
+        if (order.client && order.client.cars && order.car) {
+          const foundCar = order.client.cars.find(car => car._id.toString() === order.car);
+          if (foundCar) {
+            carObject = foundCar.toObject ? foundCar.toObject() : foundCar;
+          }
+        }
+        
+        // Добавляем индекс и объект машины к объекту заказа
+        const orderWithIndex = {
+          ...order.toObject(),
+          index,
+          car: carObject
+        };
+        
+        emitOrderUpdate(io, orderWithIndex);
       }
 
       res.json(order);

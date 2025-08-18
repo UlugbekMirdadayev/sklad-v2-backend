@@ -76,8 +76,8 @@ const orderSchema = withBaseFields({
     required: true,
   },
   car: {
-    type: String,
-    default: "",
+    type: mongoose.Schema.Types.Mixed,
+    default: null,
   },
 });
 

@@ -107,6 +107,11 @@ const productSchema = withBaseFields({
     required: true,
     default: true,
   },
+  km: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
 });
 
 module.exports = mongoose.model("Product", productSchema);

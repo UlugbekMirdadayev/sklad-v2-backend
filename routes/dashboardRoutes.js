@@ -358,19 +358,25 @@ router.get("/summary", async (req, res) => {
       Debtor.countDocuments({
         isDeleted: { $ne: true },
         client: { $in: vipClientIds },
-        remainingDebt: { $gt: 0 },
+        $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] },
       }),
 
       // Оддий қарздорлар сони
       Debtor.countDocuments({
         isDeleted: { $ne: true },
         client: { $nin: vipClientIds },
-        remainingDebt: { $gt: 0 },
+        $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] },
       }),
 
       // VIP долги
       Debtor.aggregate([
-        { $match: { isDeleted: { $ne: true }, client: { $in: vipClientIds } } },
+        { 
+          $match: { 
+            isDeleted: { $ne: true }, 
+            client: { $in: vipClientIds },
+            $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] }
+          } 
+        },
         {
           $group: {
             _id: null,
@@ -383,7 +389,11 @@ router.get("/summary", async (req, res) => {
       // Долги обычных клиентов
       Debtor.aggregate([
         {
-          $match: { isDeleted: { $ne: true }, client: { $nin: vipClientIds } },
+          $match: { 
+            isDeleted: { $ne: true }, 
+            client: { $nin: vipClientIds },
+            $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] }
+          },
         },
         {
           $group: {

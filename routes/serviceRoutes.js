@@ -164,7 +164,18 @@ router.post("/", async (req, res) => {
     };
 
     const service = new Service({
-      ...req.body,
+      client: req.body.client,
+      branch: req.body.branch,
+      createdBy: req.body.createdBy,
+      description: req.body.description || "",
+      serviceType: req.body.serviceType || "Xizmat",
+      priority: req.body.priority || "medium",
+      status: req.body.status || "new",
+      returnKm: req.body.returnKm || 0,
+      currentKm: req.body.currentKm || 0,
+      reCheckDate: req.body.reCheckDate,
+      totalPrice: req.body.totalPrice || { usd: 0, uzs: 0 },
+      discount: req.body.discount || { usd: 0, uzs: 0 },
       car,
       products,
       serviceIndex,
@@ -220,12 +231,16 @@ router.get("/", async (req, res) => {
       limit = 10,
       sortBy = "createdAt",
       sortOrder = "desc",
+      returnKm,
+      currentKm
     } = req.query;
 
     const query = { isDeleted: false }; // Only show non-deleted services
     if (branch) query.branch = branch;
     if (serviceType) query.serviceType = serviceType;
     if (priority) query.priority = priority;
+    if (returnKm) query.returnKm = returnKm;
+    if (currentKm) query.currentKm = currentKm;
 
     // Фильтрация по totalPrice.usd/uzs
     if (req.query.totalPriceUsdMin)

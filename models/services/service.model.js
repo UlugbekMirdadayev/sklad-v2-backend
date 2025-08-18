@@ -2,7 +2,6 @@ const { withBaseFields } = require("../base.model");
 const mongoose = require("mongoose");
 
 const serviceSchema = withBaseFields({
-  _id: { type: Number },
   products: {
     type: [
       {
@@ -94,34 +93,68 @@ const serviceSchema = withBaseFields({
       default: null,
     },
   },
+  returnKm: {
+    type: Number,
+    default: 0,
+  },
+  currentKm: {
+    type: Number,
+    default: 0,
+  },
+  visitIndex: {
+    type: Number,
+    default: 1,
+    min: 1,
+  },
+  serviceType: {
+    type: String,
+    default: "Xizmat",
+    trim: true,
+  },
+  priority: {
+    type: String,
+    enum: ["low", "medium", "high", "urgent"],
+    default: "medium",
+  },
+  status: {
+    type: String,
+    enum: ["new", "in_progress", "completed", "cancelled"],
+    default: "new",
+  },
 });
 
 // Add compound index for common query patterns
 serviceSchema.index({ client: 1, status: 1 });
 serviceSchema.index({ branch: 1, status: 1 });
 
-// Add pre-save middleware to update totalPrice
+// Add pre-save middleware to update totalPrice and car
 serviceSchema.pre("save", async function (next) {
-  let servicesTotal = 0;
-  let productsTotal = 0;
-  if (this.services && this.services.length > 0) {
-    servicesTotal = this.services.reduce(
-      (sum, service) => sum + service.price * service.quantity,
-      0
-    );
-  }
-  if (this.products && this.products.length > 0) {
-    productsTotal = this.products.reduce(
-      (sum, product) => sum + product.price * product.quantity,
-      0
-    );
-  }
+  // Обновляем объект машины
   this.car = {
     model: this.newCarModel || this.car?.model || null,
     plateNumber: this.newCarPlate || this.car?.plateNumber || "",
   };
 
-  this.totalPrice = servicesTotal + productsTotal;
+  // Если totalPrice не задан вручную, рассчитываем его
+  if (!this.totalPrice || (this.totalPrice.usd === 0 && this.totalPrice.uzs === 0)) {
+    let totalUsd = 0;
+    let totalUzs = 0;
+
+    // Рассчитываем общую стоимость продуктов
+    if (this.products && this.products.length > 0) {
+      for (const productItem of this.products) {
+        const productPrice = productItem.price * productItem.quantity;
+        // Предполагаем, что цена в узбекских сумах, если не указано иначе
+        totalUzs += productPrice;
+      }
+    }
+
+    this.totalPrice = {
+      usd: totalUsd,
+      uzs: totalUzs,
+    };
+  }
+
   next();
 });
 

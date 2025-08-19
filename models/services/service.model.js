@@ -87,6 +87,15 @@ const serviceSchema = withBaseFields({
       type: mongoose.Schema.Types.ObjectId,
       ref: "Car",
       default: null,
+      set: function(v) {
+        return (v === "" || v === "null" || v === "undefined") ? null : v;
+      },
+      validate: {
+        validator: function(v) {
+          return v === null || v === undefined || mongoose.Types.ObjectId.isValid(v);
+        },
+        message: 'Invalid ObjectId for car model'
+      }
     },
     plateNumber: {
       type: String,
@@ -129,10 +138,16 @@ serviceSchema.index({ branch: 1, status: 1 });
 
 // Add pre-save middleware to update totalPrice and car
 serviceSchema.pre("save", async function (next) {
-  // Обновляем объект машины
+  // Обновляем объект машины с проверкой на пустые строки
   this.car = {
-    model: this.newCarModel || this.car?.model || null,
-    plateNumber: this.newCarPlate || this.car?.plateNumber || "",
+    model: (this.newCarModel && this.newCarModel !== "") 
+      ? this.newCarModel 
+      : (this.car?.model && this.car.model !== "") 
+      ? this.car.model 
+      : null,
+    plateNumber: this.newCarPlate !== undefined
+      ? this.newCarPlate
+      : this.car?.plateNumber || "",
   };
 
   // Если totalPrice не задан вручную, рассчитываем его

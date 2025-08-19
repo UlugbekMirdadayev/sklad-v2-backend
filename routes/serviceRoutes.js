@@ -150,9 +150,9 @@ router.post("/", async (req, res) => {
     // car всегда объект, даже если пустой
     const car = {
       model:
-        req.body.newCarModel !== undefined
+        req.body.newCarModel !== undefined && req.body.newCarModel !== ""
           ? req.body.newCarModel
-          : req.body.car?.model !== undefined
+          : req.body.car?.model !== undefined && req.body.car?.model !== ""
           ? req.body.car.model
           : null,
       plateNumber:
@@ -333,10 +333,17 @@ router.put("/:id", async (req, res) => {
       quantity: i.quantity,
     }));
 
+    // Обрабатываем car объект правильно
     const updateData = {
       ...req.body,
       products,
     };
+
+    // Если передается car объект, проверяем model на пустую строку
+    if (updateData.car && updateData.car.model === "") {
+      updateData.car.model = null;
+    }
+
     const service = await Service.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
       updateData,

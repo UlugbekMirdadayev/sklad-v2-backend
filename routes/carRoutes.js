@@ -21,6 +21,7 @@ const { body, validationResult } = require("express-validator");
  *         - name
  *         - number
  *       properties:
+ *         _id:
  *           type: string
  *         name:
  *           type: string

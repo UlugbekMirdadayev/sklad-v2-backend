@@ -3,6 +3,7 @@ const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
 const SMS = require("../models/sms/sms.model");
+const smsNotificationService = require("../services/smsNotificationService");
 const {
   sendSMS,
   sendSMSWithCallback,
@@ -1637,6 +1638,152 @@ router.get("/reports/summary", authMiddleware, async (req, res) => {
     console.error("Umumiy hisobot olish xatosi:", error);
     res.status(500).json({
       message: "Umumiy hisobotni olishda xatolik yuz berdi",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sms/debt-reminders/start:
+ *   post:
+ *     summary: Qarzdor eslatma SMS service'ini ishga tushirish
+ *     tags: [SMS]
+ *     security:
+ *       - bearerAuth: []
+ *     description: Avtomatik qarzdor eslatma SMS'larini yuborish servisini ishga tushiradi
+ *     responses:
+ *       200:
+ *         description: Service muvaffaqiyatli ishga tushirildi
+ *       500:
+ *         description: Server xatosi
+ */
+router.post("/debt-reminders/start", authMiddleware, async (req, res) => {
+  try {
+    smsNotificationService.startScheduledTasks();
+    
+    res.status(200).json({
+      message: "Qarzdor eslatma SMS service ishga tushirildi",
+      status: smsNotificationService.getStatus()
+    });
+  } catch (error) {
+    console.error("SMS notification service ishga tushirishda xatolik:", error);
+    res.status(500).json({
+      message: "Service ishga tushirishda xatolik yuz berdi",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sms/debt-reminders/stop:
+ *   post:
+ *     summary: Qarzdor eslatma SMS service'ini to'xtatish
+ *     tags: [SMS]
+ *     security:
+ *       - bearerAuth: []
+ *     description: Avtomatik qarzdor eslatma SMS'larini yuborish servisini to'xtatadi
+ *     responses:
+ *       200:
+ *         description: Service muvaffaqiyatli to'xtatildi
+ *       500:
+ *         description: Server xatosi
+ */
+router.post("/debt-reminders/stop", authMiddleware, async (req, res) => {
+  try {
+    smsNotificationService.stopScheduledTasks();
+    
+    res.status(200).json({
+      message: "Qarzdor eslatma SMS service to'xtatildi",
+      status: smsNotificationService.getStatus()
+    });
+  } catch (error) {
+    console.error("SMS notification service to'xtatishda xatolik:", error);
+    res.status(500).json({
+      message: "Service to'xtatishda xatolik yuz berdi",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sms/debt-reminders/status:
+ *   get:
+ *     summary: Qarzdor eslatma SMS service holati
+ *     tags: [SMS]
+ *     security:
+ *       - bearerAuth: []
+ *     description: Avtomatik qarzdor eslatma SMS service holatini ko'rish
+ *     responses:
+ *       200:
+ *         description: Service holati
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 status:
+ *                   type: object
+ *                   properties:
+ *                     isRunning:
+ *                       type: boolean
+ *                     activeTasks:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     nextExecutions:
+ *                       type: object
+ *       500:
+ *         description: Server xatosi
+ */
+router.get("/debt-reminders/status", authMiddleware, async (req, res) => {
+  try {
+    const status = smsNotificationService.getStatus();
+    
+    res.status(200).json({
+      message: "SMS notification service holati",
+      status: status
+    });
+  } catch (error) {
+    console.error("SMS notification service holatini olishda xatolik:", error);
+    res.status(500).json({
+      message: "Service holatini olishda xatolik yuz berdi",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sms/debt-reminders/test:
+ *   post:
+ *     summary: Qarzdor eslatma SMS'larini test qilish
+ *     tags: [SMS]
+ *     security:
+ *       - bearerAuth: []
+ *     description: Qarzdor eslatma SMS'larini manual test qilish (development uchun)
+ *     responses:
+ *       200:
+ *         description: Test muvaffaqiyatli bajarildi
+ *       500:
+ *         description: Server xatosi
+ */
+router.post("/debt-reminders/test", authMiddleware, async (req, res) => {
+  try {
+    await smsNotificationService.testReminders();
+    
+    res.status(200).json({
+      message: "Qarzdor eslatma SMS'lari test qilindi",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("SMS eslatmalarini test qilishda xatolik:", error);
+    res.status(500).json({
+      message: "SMS eslatmalarini test qilishda xatolik yuz berdi",
       error: error.message,
     });
   }

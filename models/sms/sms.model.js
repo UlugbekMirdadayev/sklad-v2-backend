@@ -80,7 +80,7 @@ const smsSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["order", "notification", "verification", "marketing", "service"],
+      enum: ["order", "notification", "verification", "marketing", "service", "debt_reminder_3_days", "debt_reminder_due_date"],
       default: "notification",
     },
     orderId: {

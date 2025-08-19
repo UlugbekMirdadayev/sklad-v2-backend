@@ -21,7 +21,6 @@ const { body, validationResult } = require("express-validator");
  *         - name
  *         - number
  *       properties:
- *         _id:
  *           type: string
  *         name:
  *           type: string
@@ -110,9 +109,10 @@ router.post("/", authMiddleware, async (req, res) => {
  *               items:
  *                 $ref: '#/components/schemas/Avtomobil'
  */
+
 router.get("/", async (req, res) => {
   try {
-    const cars = await Car.find().select("-__v");
+    const cars = await Car.find();
     res.json(cars);
   } catch (e) {
     res.status(500).json({ message: e.message });
@@ -189,7 +189,8 @@ router.get("/:id", authMiddleware, async (req, res) => {
  */
 router.patch(":id", authMiddleware, avtomobilValidation, async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  if (!errors.isEmpty())
+    return res.status(400).json({ errors: errors.array() });
   try {
     const car = await Car.findById(req.params.id);
     if (!car) return res.status(404).json({ message: "Not found" });

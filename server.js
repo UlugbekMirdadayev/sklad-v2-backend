@@ -30,6 +30,7 @@ const dashboardRoutes = require("./routes/dashboardRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const debtorRoutes = require("./routes/debtorRoutes");
 const smsRoutes = require("./routes/smsRoutes");
+const smsNotificationService = require("./services/smsNotificationService");
 
 // Middleware
 app.use(express.json({ limit: "25mb" })); // Увеличиваем лимит для больших файлов
@@ -101,4 +102,12 @@ server.listen(PORT, () => {
       .slice(0, 19)
       .replace("T", " ")}`
   );
+
+  // SMS notification service'ini ishga tushirish
+  try {
+    smsNotificationService.startScheduledTasks();
+    console.log("SMS notification service avtomatik ishga tushirildi");
+  } catch (error) {
+    console.error("SMS notification service ishga tushirishda xatolik:", error.message);
+  }
 });

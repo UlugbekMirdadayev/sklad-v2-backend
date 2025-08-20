@@ -80,12 +80,17 @@ const smsSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["order", "notification", "verification", "marketing", "service", "debt_reminder_3_days", "debt_reminder_due_date"],
+      enum: ["order", "notification", "verification", "marketing", "service", "service_created", "service_completion", "debt_reminder_3_days", "debt_reminder_due_date"],
       default: "notification",
     },
     orderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
+      default: null,
+    },
+    serviceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Service",
       default: null,
     },
     clientId: {
@@ -142,6 +147,7 @@ smsSchema.index({ status: 1 });
 smsSchema.index({ type: 1 });
 smsSchema.index({ createdAt: -1 });
 smsSchema.index({ orderId: 1 });
+smsSchema.index({ serviceId: 1 });
 smsSchema.index({ clientId: 1 });
 smsSchema.index({ sentBy: 1 });
 smsSchema.index({ messageId: 1 });

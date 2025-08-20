@@ -1661,10 +1661,10 @@ router.get("/reports/summary", authMiddleware, async (req, res) => {
 router.post("/debt-reminders/start", authMiddleware, async (req, res) => {
   try {
     smsNotificationService.startScheduledTasks();
-    
+
     res.status(200).json({
       message: "Qarzdor eslatma SMS service ishga tushirildi",
-      status: smsNotificationService.getStatus()
+      status: smsNotificationService.getStatus(),
     });
   } catch (error) {
     console.error("SMS notification service ishga tushirishda xatolik:", error);
@@ -1693,10 +1693,10 @@ router.post("/debt-reminders/start", authMiddleware, async (req, res) => {
 router.post("/debt-reminders/stop", authMiddleware, async (req, res) => {
   try {
     smsNotificationService.stopScheduledTasks();
-    
+
     res.status(200).json({
       message: "Qarzdor eslatma SMS service to'xtatildi",
-      status: smsNotificationService.getStatus()
+      status: smsNotificationService.getStatus(),
     });
   } catch (error) {
     console.error("SMS notification service to'xtatishda xatolik:", error);
@@ -1743,10 +1743,10 @@ router.post("/debt-reminders/stop", authMiddleware, async (req, res) => {
 router.get("/debt-reminders/status", authMiddleware, async (req, res) => {
   try {
     const status = smsNotificationService.getStatus();
-    
+
     res.status(200).json({
       message: "SMS notification service holati",
-      status: status
+      status: status,
     });
   } catch (error) {
     console.error("SMS notification service holatini olishda xatolik:", error);
@@ -1775,15 +1775,67 @@ router.get("/debt-reminders/status", authMiddleware, async (req, res) => {
 router.post("/debt-reminders/test", authMiddleware, async (req, res) => {
   try {
     await smsNotificationService.testReminders();
-    
+
     res.status(200).json({
       message: "Qarzdor eslatma SMS'lari test qilindi",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     console.error("SMS eslatmalarini test qilishda xatolik:", error);
     res.status(500).json({
       message: "SMS eslatmalarini test qilishda xatolik yuz berdi",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sms/by-service/{serviceId}:
+ *   get:
+ *     summary: Xizmat bo'yicha yuborilgan SMS'larni olish
+ *     tags: [SMS]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Xizmat ID raqami
+ *     responses:
+ *       200:
+ *         description: Xizmatga aloqador SMS'lar
+ *       401:
+ *         description: Avtorizatsiya xatosi
+ *       404:
+ *         description: SMS topilmadi
+ *       500:
+ *         description: Server xatosi
+ */
+router.get("/by-service/:serviceId", authMiddleware, async (req, res) => {
+  try {
+    const { serviceId } = req.params;
+
+    const smsList = await SMS.find({ serviceId: serviceId })
+      .sort({ createdAt: -1 })
+      .populate("sentBy", "fullName");
+
+    if (smsList.length === 0) {
+      return res.status(404).json({
+        message: "Bu xizmat bo'yicha SMS xabarlar topilmadi",
+      });
+    }
+
+    res.status(200).json({
+      message: "Xizmat bo'yicha SMS'lar",
+      data: smsList,
+    });
+  } catch (error) {
+    console.error("Xizmat bo'yicha SMS'larni olishda xatolik:", error);
+    res.status(500).json({
+      message: "Xizmat bo'yicha SMS'larni olishda xatolik yuz berdi",
       error: error.message,
     });
   }

@@ -77,26 +77,6 @@ const emitNewService = (io, service) => {
       description: service.description,
       notes: service.notes
     });
-
-    // Также отправить в комнату конкретного филиала, если филиал указан
-    if (service.branch) {
-      io.to(`branch_${service.branch}`).emit('new_service', {
-        id: service._id,
-        client: service.client,
-        branch: service.branch,
-        car: service.car,
-        serviceType: service.serviceType,
-        priority: service.priority,
-        products: service.products,
-        totalPrice: service.totalPrice,
-        serviceIndex: service.serviceIndex,
-        visitIndex: service.visitIndex,
-        createdAt: service.createdAt,
-        description: service.description,
-        notes: service.notes
-      });
-    }
-
     console.log(`Socket event 'new_service' отправлен для услуги ${service._id}`);
   } catch (error) {
     console.error('Ошибка при отправке события new_service:', error.message);

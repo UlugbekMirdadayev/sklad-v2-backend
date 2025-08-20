@@ -4,6 +4,7 @@ const Service = require("../models/services/service.model");
 const Transaction = require("../models/transactions/transaction.model");
 const Client = require("../models/clients/client.model");
 const { emitNewService, emitServiceUpdate } = require("../utils/socketEvents");
+const smsNotificationService = require('../services/smsNotificationService');
 /**
  * @swagger
  * tags:
@@ -214,6 +215,34 @@ router.post("/", async (req, res) => {
       emitNewService(io, service);
     }
     
+    // Всегда отправляем SMS о создании услуги
+    try {
+      smsNotificationService.sendServiceCreatedSMS(service._id)
+        .then(result => {
+          console.log(`New service ${service._id} yaratildi. SMS yuborish natijasi:`, result);
+        })
+        .catch(error => {
+          console.error(`New service ${service._id} uchun SMS yuborishda xatolik:`, error);
+        });
+    } catch (smsError) {
+      console.error(`New service ${service._id} uchun SMS xizmatini chaqirishda xatolik:`, smsError);
+    }
+    
+    // Если услуга создана сразу со статусом "completed", отправляем дополнительное SMS
+    if (service.status === 'completed') {
+      try {
+        smsNotificationService.sendServiceCompletionSMS(service._id)
+          .then(result => {
+            console.log(`New service ${service._id} yakunlandi. SMS yuborish natijasi:`, result);
+          })
+          .catch(error => {
+            console.error(`New service ${service._id} uchun yakunlash SMS yuborishda xatolik:`, error);
+          });
+      } catch (smsError) {
+        console.error(`New service ${service._id} uchun yakunlash SMS xizmatini chaqirishda xatolik:`, smsError);
+      }
+    }
+    
     res.status(201).json(service);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -344,6 +373,9 @@ router.put("/:id", async (req, res) => {
       updateData.car.model = null;
     }
 
+    const oldService = await Service.findById(req.params.id);
+    if (!oldService) return res.status(404).json({ error: "Service not found" });
+    
     const service = await Service.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
       updateData,
@@ -358,6 +390,22 @@ router.put("/:id", async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       emitServiceUpdate(io, service);
+    }
+    
+    // Если статус услуги изменился на "completed", отправляем SMS
+    if (oldService.status !== 'completed' && service.status === 'completed') {
+      try {
+        const smsNotificationService = require('../services/smsNotificationService');
+        smsNotificationService.sendServiceCompletionSMS(service._id)
+          .then(result => {
+            console.log(`Service ${service._id} xizmati yakunlandi. SMS yuborish natijasi:`, result);
+          })
+          .catch(error => {
+            console.error(`Service ${service._id} uchun SMS yuborishda xatolik:`, error);
+          });
+      } catch (smsError) {
+        console.error(`Service ${service._id} uchun SMS xizmatini chaqirishda xatolik:`, smsError);
+      }
     }
     
     res.json(service);

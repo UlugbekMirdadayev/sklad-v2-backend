@@ -9,6 +9,262 @@ class SMSNotificationService {
     this.isRunning = false;
     this.scheduledTasks = new Map();
   }
+  
+  // Yangi xizmat yaratilganda SMS yuborish
+  async sendServiceCreatedSMS(serviceId) {
+    try {
+      console.log(`Yangi xizmat yaratilganda SMS yuborilmoqda. ServiceID: ${serviceId}`);
+      
+      const Service = require("../models/services/service.model");
+      const Car = require("../models/car/car.model");
+      
+      // Service ma'lumotlarini olish
+      const service = await Service.findById(serviceId)
+        .populate("client")
+        .populate("car.model");
+        
+      if (!service) {
+        console.error(`❌ ERROR: Service topilmadi. ServiceID: ${serviceId}`);
+        return { success: false, message: "Service topilmadi" };
+      }
+      
+      // Mijoz ma'lumotlarini tekshirish
+      if (!service.client || !service.client.phone) {
+        console.error(`❌ ERROR: Service uchun mijoz yoki telefon raqami topilmadi. ServiceID: ${serviceId}`);
+        return { success: false, message: "Mijoz yoki telefon raqami topilmadi" };
+      }
+      
+      // Avtomobil ma'lumotlarini olish
+      let carModel = "Noma'lum";
+      if (service.car.model) {
+        const carModelDoc = await Car.findById(service.car.model);
+        if (carModelDoc) {
+          carModel = carModelDoc.name;
+        }
+      }
+      
+      // Xizmat yaratilgan vaqt
+      const serviceDate = service.createdAt.toLocaleDateString("uz-UZ", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+      
+      const serviceTime = service.createdAt.toLocaleTimeString("uz-UZ", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      
+      // Keyingi xizmat ko'rsatish vaqti (3 oy keyingi sana)
+      const nextServiceDate = new Date(service.createdAt);
+      nextServiceDate.setMonth(nextServiceDate.getMonth() + 3);
+      
+      const nextServiceDateFormatted = nextServiceDate.toLocaleDateString("uz-UZ", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+      
+      // Mijoz va xizmat ma'lumotlari
+      const clientName = service.client.fullName || service.client.name;
+      const carNumber = service.car.plateNumber || "Noma'lum";
+      const serviceAmount = service.totalPrice.uzs.toLocaleString();
+      
+      // SMS matni
+      const message = `Hurmatli ${clientName}! Sizning ${carNumber} raqamli avtomobilingizga ${serviceDate} kuni soat ${serviceTime} da moy almashtirish xizmati ko'rsatildi. To'lov summasi: ${serviceAmount} so'm. Keyingi moy almashtirish sanasi: ${nextServiceDateFormatted}. Xizmat ko'rsatuvchi: UMA OIL 907411232`;
+      
+      try {
+        // SMS yuborish
+        console.log(`Yangi xizmat haqida SMS yuborilmoqda: ${service.client.phone}`);
+        const result = await sendSMS(service.client.phone, message);
+        
+        // Ma'lumotlarni bazaga saqlash
+        const smsRecord = new SMS({
+          clientId: service.client._id,
+          serviceId: service._id,
+          phone: result.phone || service.client.phone,
+          message: result.message || message,
+          messageId: result.message_id,
+          status: result.status,
+          cost: result.cost || 0,
+          parts: result.parts || 1,
+          type: "service_created",
+          sentAt: new Date(),
+          response: result
+        });
+        
+        await smsRecord.save();
+        console.log(`✅ SUCCESS: Yangi xizmat haqida SMS ${clientName} ga muvaffaqiyatli yuborildi`, {
+          messageId: result.message_id,
+          status: result.status,
+          cost: result.cost,
+          parts: result.parts
+        });
+        
+        return { success: true, message: "SMS muvaffaqiyatli yuborildi", data: result };
+        
+      } catch (smsError) {
+        // Xato bo'lgan SMS ma'lumotlarini saqlash
+        const errorSmsRecord = new SMS({
+          clientId: service.client._id,
+          serviceId: service._id,
+          phone: service.client.phone,
+          message: message,
+          status: "failed",
+          type: "service_created",
+          failureReason: smsError.message,
+          response: { error: smsError.message },
+          createdAt: new Date()
+        });
+        
+        await errorSmsRecord.save();
+        console.error(`❌ FAILED: Mijoz ${clientName} (${service.client.phone}) ga yangi xizmat haqida SMS yuborishda xatolik:`, {
+          error: smsError.message,
+          clientName: clientName,
+          phone: service.client.phone,
+          serviceId: serviceId
+        });
+        
+        return { success: false, message: smsError.message };
+      }
+      
+    } catch (error) {
+      console.error("❌ GLOBAL ERROR: Yangi xizmat haqida SMS yuborishda umumiy xatolik:", {
+        error: error.message,
+        serviceId: serviceId,
+        stack: error.stack
+      });
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Xizmat ko'rsatilgandan so'ng SMS yuborish
+  async sendServiceCompletionSMS(serviceId) {
+    try {
+      console.log(`Xizmat ko'rsatilgandan so'ng SMS yuborilmoqda. ServiceID: ${serviceId}`);
+      
+      const Service = require("../models/services/service.model");
+      const Car = require("../models/car/car.model");
+      
+      // Service ma'lumotlarini olish
+      const service = await Service.findById(serviceId)
+        .populate("client")
+        .populate("car.model");
+        
+      if (!service) {
+        console.error(`❌ ERROR: Service topilmadi. ServiceID: ${serviceId}`);
+        return { success: false, message: "Service topilmadi" };
+      }
+      
+      // Mijoz ma'lumotlarini tekshirish
+      if (!service.client || !service.client.phone) {
+        console.error(`❌ ERROR: Service uchun mijoz yoki telefon raqami topilmadi. ServiceID: ${serviceId}`);
+        return { success: false, message: "Mijoz yoki telefon raqami topilmadi" };
+      }
+      
+      // Avtomobil ma'lumotlarini olish
+      let carModel = "Noma'lum";
+      if (service.car.model) {
+        const carModelDoc = await Car.findById(service.car.model);
+        if (carModelDoc) {
+          carModel = carModelDoc.name;
+        }
+      }
+      
+      // Xizmat ko'rsatilgan vaqt
+      const serviceDate = service.createdAt.toLocaleDateString("uz-UZ", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+      
+      const serviceTime = service.createdAt.toLocaleTimeString("uz-UZ", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      
+      // Keyingi xizmat ko'rsatish vaqti (3 oy keyingi sana)
+      const nextServiceDate = new Date(service.createdAt);
+      nextServiceDate.setMonth(nextServiceDate.getMonth() + 3);
+      
+      const nextServiceDateFormatted = nextServiceDate.toLocaleDateString("uz-UZ", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+      
+      // Mijoz va xizmat ma'lumotlari
+      const clientName = service.client.fullName || service.client.name;
+      const carNumber = service.car.plateNumber || "Noma'lum";
+      const serviceAmount = service.totalPrice.uzs.toLocaleString();
+      
+      // SMS matni
+      const message = `Hurmatli ${clientName}! Sizning ${carNumber} raqamli avtomobilingizga ${serviceDate} kuni soat ${serviceTime} da moy almashtirish xizmati ko'rsatildi. To'lov summasi: ${serviceAmount} so'm. Keyingi moy almashtirish sanasi: ${nextServiceDateFormatted}. Xizmat ko'rsatuvchi: UMA OIL 907411232`;
+      
+      try {
+        // SMS yuborish
+        console.log(`Xizmat SMS yuborilmoqda: ${service.client.phone}`);
+        const result = await sendSMS(service.client.phone, message);
+        
+        // Ma'lumotlarni bazaga saqlash
+        const smsRecord = new SMS({
+          clientId: service.client._id,
+          serviceId: service._id,
+          phone: result.phone || service.client.phone,
+          message: result.message || message,
+          messageId: result.message_id,
+          status: result.status,
+          cost: result.cost || 0,
+          parts: result.parts || 1,
+          type: "service_completion",
+          sentAt: new Date(),
+          response: result
+        });
+        
+        await smsRecord.save();
+        console.log(`✅ SUCCESS: Xizmat yakunlanganligi haqida SMS ${clientName} ga muvaffaqiyatli yuborildi`, {
+          messageId: result.message_id,
+          status: result.status,
+          cost: result.cost,
+          parts: result.parts
+        });
+        
+        return { success: true, message: "SMS muvaffaqiyatli yuborildi", data: result };
+        
+      } catch (smsError) {
+        // Xato bo'lgan SMS ma'lumotlarini saqlash
+        const errorSmsRecord = new SMS({
+          clientId: service.client._id,
+          serviceId: service._id,
+          phone: service.client.phone,
+          message: message,
+          status: "failed",
+          type: "service_completion",
+          failureReason: smsError.message,
+          response: { error: smsError.message },
+          createdAt: new Date()
+        });
+        
+        await errorSmsRecord.save();
+        console.error(`❌ FAILED: Mijoz ${clientName} (${service.client.phone}) ga xizmat SMS yuborishda xatolik:`, {
+          error: smsError.message,
+          clientName: clientName,
+          phone: service.client.phone,
+          serviceId: serviceId
+        });
+        
+        return { success: false, message: smsError.message };
+      }
+      
+    } catch (error) {
+      console.error("❌ GLOBAL ERROR: Xizmat SMS yuborishda umumiy xatolik:", {
+        error: error.message,
+        serviceId: serviceId,
+        stack: error.stack
+      });
+      return { success: false, message: error.message };
+    }
+  }
 
   // SMS shablonlari (eskiz.uz dan tasdiqdan o'tganda o'zgartiriladi)
   getSMSTemplate(type, clientName, amount, currency, dueDate) {

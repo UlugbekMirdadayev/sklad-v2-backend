@@ -80,7 +80,17 @@ const smsSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["order", "notification", "verification", "marketing", "service", "service_created", "service_completion", "debt_reminder_3_days", "debt_reminder_due_date"],
+      enum: [
+        "order",
+        "notification",
+        "verification",
+        "marketing",
+        "service",
+        "service_created",
+        "service_completion",
+        "debt_reminder_3_days",
+        "debt_reminder_due_date",
+      ],
       default: "notification",
     },
     orderId: {
@@ -138,6 +148,7 @@ const smsSchema = new mongoose.Schema(
   {
     timestamps: true,
     collection: "sms",
+    versionKey: false,
   }
 );
 

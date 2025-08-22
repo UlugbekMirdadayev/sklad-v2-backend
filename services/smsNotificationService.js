@@ -10,6 +10,56 @@ class SMSNotificationService {
     this.scheduledTasks = new Map();
   }
   
+  // Telefon raqamini tekshirish
+  isValidPhoneNumber(phone) {
+    if (!phone || typeof phone !== 'string') {
+      return false;
+    }
+    
+    // Telefon raqamini tozalash (probel, tire, qavs va boshqa belgilarni olib tashlash)
+    const cleanPhone = phone.replace(/[\s\-\(\)\+]/g, '');
+    
+    // O'zbekiston telefon raqamlari formatlari:
+    // 998901234567 (12 raqam, 998 bilan boshlanadi)
+    // 901234567 (9 raqam)
+    // +998901234567 (+ bilan boshlanadi)
+    
+    // Faqat raqamlardan iborat ekanligini tekshirish
+    if (!/^\d+$/.test(cleanPhone)) {
+      return false;
+    }
+    
+    // O'zbekiston raqamlari uchun formatlar
+    if (cleanPhone.length === 12 && cleanPhone.startsWith('998')) {
+      return true;
+    }
+    
+    if (cleanPhone.length === 9 && /^[6-9]/.test(cleanPhone)) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // Telefon raqamini to'g'ri formatga keltirish
+  formatPhoneNumber(phone) {
+    if (!phone) return null;
+    
+    const cleanPhone = phone.replace(/[\s\-\(\)\+]/g, '');
+    
+    // Agar 9 raqamli bo'lsa, 998 qo'shish
+    if (cleanPhone.length === 9 && /^[6-9]/.test(cleanPhone)) {
+      return '998' + cleanPhone;
+    }
+    
+    // Agar 12 raqamli va 998 bilan boshlansa
+    if (cleanPhone.length === 12 && cleanPhone.startsWith('998')) {
+      return cleanPhone;
+    }
+    
+    return cleanPhone;
+  }
+  
   // Yangi xizmat yaratilganda SMS yuborish
   async sendServiceCreatedSMS(serviceId) {
     try {
@@ -32,6 +82,19 @@ class SMSNotificationService {
       if (!service.client || !service.client.phone) {
         console.error(`❌ ERROR: Service uchun mijoz yoki telefon raqami topilmadi. ServiceID: ${serviceId}`);
         return { success: false, message: "Mijoz yoki telefon raqami topilmadi" };
+      }
+      
+      // Telefon raqamini validatsiya qilish
+      if (!this.isValidPhoneNumber(service.client.phone)) {
+        console.error(`❌ ERROR: Noto'g'ri telefon raqami formati. Phone: ${service.client.phone}, ServiceID: ${serviceId}`);
+        return { success: false, message: "Noto'g'ri telefon raqami formati" };
+      }
+      
+      // Telefon raqamini to'g'ri formatga keltirish
+      const formattedPhone = this.formatPhoneNumber(service.client.phone);
+      if (!formattedPhone) {
+        console.error(`❌ ERROR: Telefon raqamini formatlashda xatolik. Phone: ${service.client.phone}, ServiceID: ${serviceId}`);
+        return { success: false, message: "Telefon raqamini formatlashda xatolik" };
       }
       
       // Avtomobil ma'lumotlarini olish
@@ -75,14 +138,14 @@ class SMSNotificationService {
       
       try {
         // SMS yuborish
-        console.log(`Yangi xizmat haqida SMS yuborilmoqda: ${service.client.phone}`);
-        const result = await sendSMS(service.client.phone, message);
+        console.log(`Yangi xizmat haqida SMS yuborilmoqda: ${formattedPhone}`);
+        const result = await sendSMS(formattedPhone, message);
         
         // Ma'lumotlarni bazaga saqlash
         const smsRecord = new SMS({
           clientId: service.client._id,
           serviceId: service._id,
-          phone: result.phone || service.client.phone,
+          phone: result.phone || formattedPhone,
           message: result.message || message,
           messageId: result.message_id,
           status: result.status,
@@ -108,7 +171,7 @@ class SMSNotificationService {
         const errorSmsRecord = new SMS({
           clientId: service.client._id,
           serviceId: service._id,
-          phone: service.client.phone,
+          phone: formattedPhone,
           message: message,
           status: "failed",
           type: "service_created",
@@ -118,10 +181,10 @@ class SMSNotificationService {
         });
         
         await errorSmsRecord.save();
-        console.error(`❌ FAILED: Mijoz ${clientName} (${service.client.phone}) ga yangi xizmat haqida SMS yuborishda xatolik:`, {
+        console.error(`❌ FAILED: Mijoz ${clientName} (${formattedPhone}) ga yangi xizmat haqida SMS yuborishda xatolik:`, {
           error: smsError.message,
           clientName: clientName,
-          phone: service.client.phone,
+          phone: formattedPhone,
           serviceId: serviceId
         });
         
@@ -160,6 +223,19 @@ class SMSNotificationService {
       if (!service.client || !service.client.phone) {
         console.error(`❌ ERROR: Service uchun mijoz yoki telefon raqami topilmadi. ServiceID: ${serviceId}`);
         return { success: false, message: "Mijoz yoki telefon raqami topilmadi" };
+      }
+      
+      // Telefon raqamini validatsiya qilish
+      if (!this.isValidPhoneNumber(service.client.phone)) {
+        console.error(`❌ ERROR: Noto'g'ri telefon raqami formati. Phone: ${service.client.phone}, ServiceID: ${serviceId}`);
+        return { success: false, message: "Noto'g'ri telefon raqami formati" };
+      }
+      
+      // Telefon raqamini to'g'ri formatga keltirish
+      const formattedPhone = this.formatPhoneNumber(service.client.phone);
+      if (!formattedPhone) {
+        console.error(`❌ ERROR: Telefon raqamini formatlashda xatolik. Phone: ${service.client.phone}, ServiceID: ${serviceId}`);
+        return { success: false, message: "Telefon raqamini formatlashda xatolik" };
       }
       
       // Avtomobil ma'lumotlarini olish
@@ -203,14 +279,14 @@ class SMSNotificationService {
       
       try {
         // SMS yuborish
-        console.log(`Xizmat SMS yuborilmoqda: ${service.client.phone}`);
-        const result = await sendSMS(service.client.phone, message);
+        console.log(`Xizmat SMS yuborilmoqda: ${formattedPhone}`);
+        const result = await sendSMS(formattedPhone, message);
         
         // Ma'lumotlarni bazaga saqlash
         const smsRecord = new SMS({
           clientId: service.client._id,
           serviceId: service._id,
-          phone: result.phone || service.client.phone,
+          phone: result.phone || formattedPhone,
           message: result.message || message,
           messageId: result.message_id,
           status: result.status,
@@ -236,7 +312,7 @@ class SMSNotificationService {
         const errorSmsRecord = new SMS({
           clientId: service.client._id,
           serviceId: service._id,
-          phone: service.client.phone,
+          phone: formattedPhone,
           message: message,
           status: "failed",
           type: "service_completion",
@@ -246,10 +322,10 @@ class SMSNotificationService {
         });
         
         await errorSmsRecord.save();
-        console.error(`❌ FAILED: Mijoz ${clientName} (${service.client.phone}) ga xizmat SMS yuborishda xatolik:`, {
+        console.error(`❌ FAILED: Mijoz ${clientName} (${formattedPhone}) ga xizmat SMS yuborishda xatolik:`, {
           error: smsError.message,
           clientName: clientName,
-          phone: service.client.phone,
+          phone: formattedPhone,
           serviceId: serviceId
         });
         
@@ -260,6 +336,207 @@ class SMSNotificationService {
       console.error("❌ GLOBAL ERROR: Xizmat SMS yuborishda umumiy xatolik:", {
         error: error.message,
         serviceId: serviceId,
+        stack: error.stack
+      });
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Yangi buyurtma yaratilganda SMS yuborish
+  async sendOrderCreatedSMS(orderId) {
+    try {
+      console.log(`Yangi buyurtma yaratilganda SMS yuborilmoqda. OrderID: ${orderId}`);
+      
+      const Order = require("../models/orders/order.model");
+      const Debtor = require("../models/debtors/debtor.model");
+      
+      // Order ma'lumotlarini olish
+      const order = await Order.findById(orderId)
+        .populate("client");
+        
+      if (!order) {
+        console.error(`❌ ERROR: Order topilmadi. OrderID: ${orderId}`);
+        return { success: false, message: "Order topilmadi" };
+      }
+      
+      // Mijoz ma'lumotlarini tekshirish
+      if (!order.client || !order.client.phone) {
+        console.error(`❌ ERROR: Order uchun mijoz yoki telefon raqami topilmadi. OrderID: ${orderId}`);
+        return { success: false, message: "Mijoz yoki telefon raqami topilmadi" };
+      }
+      
+      // Telefon raqamini validatsiya qilish
+      if (!this.isValidPhoneNumber(order.client.phone)) {
+        console.error(`❌ ERROR: Noto'g'ri telefon raqami formati. Phone: ${order.client.phone}, OrderID: ${orderId}`);
+        return { success: false, message: "Noto'g'ri telefon raqami formati" };
+      }
+      
+      // Telefon raqamini to'g'ri formatga keltirish
+      const formattedPhone = this.formatPhoneNumber(order.client.phone);
+      if (!formattedPhone) {
+        console.error(`❌ ERROR: Telefon raqamini formatlashda xatolik. Phone: ${order.client.phone}, OrderID: ${orderId}`);
+        return { success: false, message: "Telefon raqamini formatlashda xatolik" };
+      }
+      
+      // Mijozning avvalgi qarzini tekshirish
+      let previousDebt = { usd: 0, uzs: 0 };
+      try {
+        const debtor = await Debtor.findOne({ client: order.client._id });
+        if (debtor && debtor.currentDebt) {
+          previousDebt = {
+            usd: debtor.currentDebt.usd || 0,
+            uzs: debtor.currentDebt.uzs || 0
+          };
+        }
+      } catch (debtError) {
+        console.log(`Mijoz ${order.client.fullName || order.client.name} uchun qarz ma'lumotlarini olishda xatolik:`, debtError.message);
+      }
+      
+      // Buyurtma ma'lumotlari
+      const clientName = order.client.fullName || order.client.name;
+      const orderTotalUsd = order.totalPrice?.usd || 0;
+      const orderTotalUzs = order.totalPrice?.uzs || 0;
+      const paidUsd = order.paidAmount?.usd || 0;
+      const paidUzs = order.paidAmount?.uzs || 0;
+      
+      // Hisobotlar
+      const previousTotalUsd = previousDebt.usd;
+      const previousTotalUzs = previousDebt.uzs;
+      
+      const currentTotalUsd = orderTotalUsd;
+      const currentTotalUzs = orderTotalUzs;
+      
+      const grandTotalUsd = previousTotalUsd + currentTotalUsd;
+      const grandTotalUzs = previousTotalUzs + currentTotalUzs;
+      
+      const remainingUsd = grandTotalUsd - paidUsd;
+      const remainingUzs = grandTotalUzs - paidUzs;
+      
+      // SMS matnini tayyorlash
+      let message = `Hurmatli ${clientName}!\n`;
+      
+      // Avvalgi qarz
+      if (previousTotalUsd > 0 || previousTotalUzs > 0) {
+        message += `Avvalgi qarz: `;
+        if (previousTotalUsd > 0 && previousTotalUzs > 0) {
+          message += `${previousTotalUsd} USD, ${previousTotalUzs.toLocaleString()} UZS`;
+        } else if (previousTotalUsd > 0) {
+          message += `${previousTotalUsd} USD`;
+        } else {
+          message += `${previousTotalUzs.toLocaleString()} UZS`;
+        }
+        message += `\n`;
+      }
+      
+      // Hozirgi buyurtma
+      message += `Hozirgi buyurtma: `;
+      if (currentTotalUsd > 0 && currentTotalUzs > 0) {
+        message += `${currentTotalUsd} USD, ${currentTotalUzs.toLocaleString()} UZS`;
+      } else if (currentTotalUsd > 0) {
+        message += `${currentTotalUsd} USD`;
+      } else {
+        message += `${currentTotalUzs.toLocaleString()} UZS`;
+      }
+      message += `\n`;
+      
+      // Jami summa
+      message += `Jami: `;
+      if (grandTotalUsd > 0 && grandTotalUzs > 0) {
+        message += `${grandTotalUsd} USD, ${grandTotalUzs.toLocaleString()} UZS`;
+      } else if (grandTotalUsd > 0) {
+        message += `${grandTotalUsd} USD`;
+      } else {
+        message += `${grandTotalUzs.toLocaleString()} UZS`;
+      }
+      message += `\n`;
+      
+      // To'langan summa
+      if (paidUsd > 0 || paidUzs > 0) {
+        message += `Berdi hozir: `;
+        if (paidUsd > 0 && paidUzs > 0) {
+          message += `${paidUsd} USD, ${paidUzs.toLocaleString()} UZS`;
+        } else if (paidUsd > 0) {
+          message += `${paidUsd} USD`;
+        } else {
+          message += `${paidUzs.toLocaleString()} UZS`;
+        }
+        message += `\n`;
+      }
+      
+      // Qolgan summa
+      if (remainingUsd > 0 || remainingUzs > 0) {
+        message += `Qoldi: `;
+        if (remainingUsd > 0 && remainingUzs > 0) {
+          message += `${remainingUsd} USD, ${remainingUzs.toLocaleString()} UZS`;
+        } else if (remainingUsd > 0) {
+          message += `${remainingUsd} USD`;
+        } else {
+          message += `${remainingUzs.toLocaleString()} UZS`;
+        }
+        message += `\n`;
+      }
+      
+      message += `Xizmat ko'rsatuvchi: UMA OIL 907411232`;
+      
+      try {
+        // SMS yuborish
+        console.log(`Yangi buyurtma haqida SMS yuborilmoqda: ${formattedPhone}`);
+        const result = await sendSMS(formattedPhone, message);
+        
+        // Ma'lumotlarni bazaga saqlash
+        const smsRecord = new SMS({
+          clientId: order.client._id,
+          orderId: order._id,
+          phone: result.phone || formattedPhone,
+          message: result.message || message,
+          messageId: result.message_id,
+          status: result.status,
+          cost: result.cost || 0,
+          parts: result.parts || 1,
+          type: "order_created",
+          sentAt: new Date(),
+          response: result
+        });
+        
+        await smsRecord.save();
+        console.log(`✅ SUCCESS: Yangi buyurtma haqida SMS ${clientName} ga muvaffaqiyatli yuborildi`, {
+          messageId: result.message_id,
+          status: result.status,
+          cost: result.cost,
+          parts: result.parts
+        });
+        
+        return { success: true, message: "SMS muvaffaqiyatli yuborildi", data: result };
+        
+      } catch (smsError) {
+        // Xato bo'lgan SMS ma'lumotlarini saqlash
+        const errorSmsRecord = new SMS({
+          clientId: order.client._id,
+          orderId: order._id,
+          phone: formattedPhone,
+          message: message,
+          status: "failed",
+          type: "order_created",
+          failureReason: smsError.message,
+          response: { error: smsError.message },
+          createdAt: new Date()
+        });
+        
+        await errorSmsRecord.save();
+        console.error(`❌ FAILED: Mijoz ${clientName} (${formattedPhone}) ga yangi buyurtma haqida SMS yuborishda xatolik:`, {
+          error: smsError.message,
+          clientName: clientName,
+          phone: formattedPhone,
+          orderId: orderId
+        });
+        
+        return { success: false, message: smsError.message };
+      }
+      
+    } catch (error) {
+      console.error("❌ GLOBAL ERROR: Yangi buyurtma haqida SMS yuborishda umumiy xatolik:", {
+        error: error.message,
+        orderId: orderId,
         stack: error.stack
       });
       return { success: false, message: error.message };
@@ -335,6 +612,25 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`
             continue;
           }
 
+          // Mijoz telefon raqamini tekshirish
+          if (!debtor.client.phone) {
+            console.log(`Mijoz ${debtor.client.name} uchun telefon raqami topilmadi. SMS yuborilmaydi.`);
+            continue;
+          }
+
+          // Telefon raqamini validatsiya qilish
+          if (!this.isValidPhoneNumber(debtor.client.phone)) {
+            console.log(`Mijoz ${debtor.client.name} uchun noto'g'ri telefon raqami: ${debtor.client.phone}. SMS yuborilmaydi.`);
+            continue;
+          }
+
+          // Telefon raqamini to'g'ri formatga keltirish
+          const formattedPhone = this.formatPhoneNumber(debtor.client.phone);
+          if (!formattedPhone) {
+            console.log(`Mijoz ${debtor.client.name} telefon raqamini formatlashda xatolik: ${debtor.client.phone}. SMS yuborilmaydi.`);
+            continue;
+          }
+
           // Qarz miqdorini hisoblash
           const totalDebt = debtor.currentDebt.usd + debtor.currentDebt.uzs;
           let amount, currency;
@@ -354,12 +650,12 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`
           const message = this.getSMSTemplate("3_kun_oldin", debtor.client.name, amount, currency, dueDate);
 
           // SMS yuborish
-          const result = await sendSMS(debtor.client.phone, message);
+          const result = await sendSMS(formattedPhone, message);
 
           // SMS bazaga saqlash
           const smsRecord = new SMS({
             clientId: debtor.client._id,
-            phone: debtor.client.phone,
+            phone: formattedPhone,
             message: message,
             messageId: result.message_id,
             status: result.status,
@@ -420,6 +716,25 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`
             continue;
           }
 
+          // Mijoz telefon raqamini tekshirish
+          if (!debtor.client.phone) {
+            console.log(`Mijoz ${debtor.client.name} uchun telefon raqami topilmadi. SMS yuborilmaydi.`);
+            continue;
+          }
+
+          // Telefon raqamini validatsiya qilish
+          if (!this.isValidPhoneNumber(debtor.client.phone)) {
+            console.log(`Mijoz ${debtor.client.name} uchun noto'g'ri telefon raqami: ${debtor.client.phone}. SMS yuborilmaydi.`);
+            continue;
+          }
+
+          // Telefon raqamini to'g'ri formatga keltirish
+          const formattedPhone = this.formatPhoneNumber(debtor.client.phone);
+          if (!formattedPhone) {
+            console.log(`Mijoz ${debtor.client.name} telefon raqamini formatlashda xatolik: ${debtor.client.phone}. SMS yuborilmaydi.`);
+            continue;
+          }
+
           // Qarz miqdorini hisoblash
           let amount, currency;
           
@@ -437,12 +752,12 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`
           const message = this.getSMSTemplate("bugun", debtor.client.name, amount, currency, "bugun");
 
           // SMS yuborish
-          const result = await sendSMS(debtor.client.phone, message);
+          const result = await sendSMS(formattedPhone, message);
 
           // SMS bazaga saqlash
           const smsRecord = new SMS({
             clientId: debtor.client._id,
-            phone: debtor.client.phone,
+            phone: formattedPhone,
             message: message,
             messageId: result.message_id,
             status: result.status,

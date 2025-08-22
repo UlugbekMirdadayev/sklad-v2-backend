@@ -9,7 +9,7 @@
  * @swagger
  * /api/dashboard/summary:
  *   get:
- *     summary: Dashboard учун барча метрикаларни олиш (top cards, графиклар, сўнгги хизматлар, топ махсулотлар)
+ *     summary: Dashboard учун барча метрикаларни олиш
  *     tags: [Dashboard]
  *     security:
  *       - bearerAuth: []
@@ -56,6 +56,14 @@
  *                         uzs:
  *                           type: number
  *                       description: Ойлик даромад
+ *                     monthlyProfit:
+ *                       type: object
+ *                       properties:
+ *                         usd:
+ *                           type: number
+ *                         uzs:
+ *                           type: number
+ *                       description: Ойлик фойда (mahsulotlar narxi - таннарх)
  *                     stockCount:
  *                       type: integer
  *                       description: Омборда мавжуд махсулотлар сони
@@ -165,6 +173,56 @@ const Product = require("../models/products/product.model");
 const Service = require("../models/services/service.model");
 const Client = require("../models/clients/client.model");
 const Debtor = require("../models/debtors/debtor.model");
+const Order = require("../models/orders/order.model");
+const mongoose = require("mongoose");
+// Функция для расчета прибыли по сервисам за месяц
+async function getServiceMonthlyProfit(start, end) {
+  // Получаем все сервисы за месяц
+  const services = await Service.find({
+    createdAt: { $gte: start, $lt: end },
+    isDeleted: { $ne: true },
+  }).lean();
+
+  // Собираем все productId из сервисов
+  const allProductIds = [];
+  services.forEach(s => {
+    if (Array.isArray(s.products)) {
+      s.products.forEach(p => {
+        if (p.product) allProductIds.push(p.product.toString());
+      });
+    }
+  });
+
+  // Получаем себестоимость всех продуктов одним запросом
+  const productsMap = {};
+  if (allProductIds.length > 0) {
+    const products = await Product.find({ _id: { $in: allProductIds } }).lean();
+    products.forEach(prod => {
+      productsMap[prod._id.toString()] = prod;
+    });
+  }
+
+  // Считаем profit по всем сервисам
+  let totalUsd = 0;
+  let totalUzs = 0;
+  for (const service of services) {
+    if (Array.isArray(service.products)) {
+      for (const p of service.products) {
+        const prod = productsMap[p.product?.toString()];
+        if (!prod) continue;
+        // Если продукт в USD
+        if (prod.currency === "USD") {
+          const profit = ((p.price - prod.costPrice) * p.quantity) || 0;
+          totalUsd += profit;
+        } else if (prod.currency === "UZS") {
+          const profit = ((p.price - prod.costPrice) * p.quantity) || 0;
+          totalUzs += profit;
+        }
+      }
+    }
+  }
+  return { usd: totalUsd, uzs: totalUzs };
+}
 
 // Ҳафталик даромадни Transaction'лардан олиш
 async function getWeeklyIncomeFromTransactions() {
@@ -256,7 +314,9 @@ router.get("/summary", async (req, res) => {
       uzs: todayIncomeAgg[0]?.totalUzs || 0,
     };
 
-    // Ойлик даромад (Transaction'лардан)
+    // Ойлик даромад ва фойда (Transaction'лардан ва Product'лардан)
+
+    // Ойлик даромад
     const monthlyIncomeAgg = await Transaction.aggregate([
       {
         $match: {
@@ -274,9 +334,35 @@ router.get("/summary", async (req, res) => {
       },
     ]);
 
+    // Ойлик фойда по заказам (Order)
+    const orderMonthlyProfitAgg = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startofMonth, $lt: endofManth },
+          isDeleted: { $ne: true },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalUsd: { $sum: "$profitAmount.usd" },
+          totalUzs: { $sum: "$profitAmount.uzs" },
+        },
+      },
+    ]);
+
+    // Ойлик фойда по сервисам (Service)
+    const serviceMonthlyProfit = await getServiceMonthlyProfit(startofMonth, endofManth);
+
     const monthlyIncome = {
       usd: monthlyIncomeAgg[0]?.totalUsd || 0,
       uzs: monthlyIncomeAgg[0]?.totalUzs || 0,
+    };
+
+    // Ойлик фойда по заказам
+    const orderMonthlyProfit = {
+      usd: orderMonthlyProfitAgg[0]?.totalUsd || 0,
+      uzs: orderMonthlyProfitAgg[0]?.totalUzs || 0,
     };
 
     // Получаем список VIP клиентов
@@ -370,12 +456,12 @@ router.get("/summary", async (req, res) => {
 
       // VIP долги
       Debtor.aggregate([
-        { 
-          $match: { 
-            isDeleted: { $ne: true }, 
+        {
+          $match: {
+            isDeleted: { $ne: true },
             client: { $in: vipClientIds },
-            $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] }
-          } 
+            $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] },
+          },
         },
         {
           $group: {
@@ -389,10 +475,10 @@ router.get("/summary", async (req, res) => {
       // Долги обычных клиентов
       Debtor.aggregate([
         {
-          $match: { 
-            isDeleted: { $ne: true }, 
+          $match: {
+            isDeleted: { $ne: true },
             client: { $nin: vipClientIds },
-            $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] }
+            $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] },
           },
         },
         {
@@ -511,6 +597,8 @@ router.get("/summary", async (req, res) => {
       todayServicesCount,
       todayIncome,
       monthlyIncome,
+      orderMonthlyProfit, // Фойда по заказам
+      serviceMonthlyProfit, // Фойда по сервисам
       stockCount,
       lowStockProducts,
       productCapital,

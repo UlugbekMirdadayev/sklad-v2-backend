@@ -13,7 +13,7 @@ const TELEGRAM_TOKEN = "8178295781:AAHsA6ZRWFrYhXItqb1iPHskoJGweMoqk_I";
 const TELEGRAM_CHAT_ID = "-1002798343078"; // o'zingizning chat_id yoki group_id
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 const { emitNewOrder, emitOrderUpdate } = require("../utils/socketEvents");
-const smsNotificationService = require("../services/smsNotificationService");
+const smsNotificationService = require('../services/smsNotificationService');
 
 // Order validation
 const orderValidation = [
@@ -558,27 +558,17 @@ router.post("/", orderValidation, async (req, res) => {
       emitNewOrder(io, orderWithIndex);
     }
 
-    // Отправляем SMS о создании заказа
+    // Отправить SMS о создании заказа
     try {
-      smsNotificationService
-        .sendOrderCreatedSMS(order._id)
-        .then((result) => {
-          console.log(
-            `Yangi buyurtma ${order._id} yaratildi. SMS yuborish natijasi:`,
-            result
-          );
+      smsNotificationService.sendOrderCreatedSMS(order._id)
+        .then(result => {
+          console.log(`Order ${order._id} yaratildi. SMS yuborish natijasi:`, result);
         })
-        .catch((error) => {
-          console.error(
-            `Buyurtma ${order._id} uchun SMS yuborishda xatolik:`,
-            error
-          );
+        .catch(error => {
+          console.error(`Order ${order._id} uchun SMS yuborishda xatolik:`, error);
         });
     } catch (smsError) {
-      console.error(
-        `Buyurtma ${order._id} uchun SMS xizmatini chaqirishda xatolik:`,
-        smsError
-      );
+      console.error(`Order ${order._id} uchun SMS xizmatini chaqirishda xatolik:`, smsError);
     }
 
     res.status(201).json(order);
@@ -618,12 +608,6 @@ router.get("/", async (req, res) => {
         .populate("branch")
         .populate("products.product")
         .populate({
-          path: "car",
-          populate: {
-            path: "model",
-          },
-        })
-        .populate({
           path: "client",
           populate: {
             path: "cars.model",
@@ -653,9 +637,27 @@ router.get("/", async (req, res) => {
 
         const index = await Order.countDocuments(dailyQuery);
 
+        // Находим машину в массиве cars клиента или используем уже сохраненный объект
+        let carObject = null;
+
+        // Если car уже объект (новая логика), используем его
+        if (order.car && typeof order.car === "object") {
+          carObject = order.car;
+        }
+        // Если car это ID (старая логика), ищем в массиве cars клиента
+        else if (order.client && order.client.cars && order.car) {
+          const foundCar = order.client.cars.find(
+            (car) => car._id.toString() === order.car.toString()
+          );
+          if (foundCar) {
+            carObject = foundCar.toObject ? foundCar.toObject() : foundCar;
+          }
+        }
+
         return {
           ...order.toObject(),
-          index,
+          index, // kunlik index
+          car: carObject,
         };
       })
     );

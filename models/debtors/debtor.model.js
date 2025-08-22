@@ -113,6 +113,12 @@ debtorSchema.post("save", async function(doc) {
       // Mijoz ma'lumotlarini olish
       const client = await Client.findById(doc.client);
       if (client && client.phone) {
+        // VIP mijozga SMS yuborilmasin
+        if (client.isVIP) {
+          console.log(`ℹ️ INFO: VIP mijoz ${client.name} ga qarz to'liq to'langanligi haqida SMS yuborilmaydi.`);
+          return;
+        }
+
         const message = `Hurmatli ${client.name}! Sizning qarzingiz to'liq to'landi. Bizga ishonch bildirganingiz uchun rahmat! Ma'lumot: +998996572600`;
         
         // SMS yuborish

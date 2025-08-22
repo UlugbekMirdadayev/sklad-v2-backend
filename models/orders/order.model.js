@@ -27,6 +27,10 @@ const orderProductSchema = new mongoose.Schema({
   },
 });
 
+const orderCarSchema = new mongoose.Schema({
+  model: { type: mongoose.Schema.Types.ObjectId, ref: "Car", default: null },
+});
+
 const orderSchema = withBaseFields({
   client: {
     type: mongoose.Schema.Types.ObjectId,
@@ -76,7 +80,7 @@ const orderSchema = withBaseFields({
     required: true,
   },
   car: {
-    type: mongoose.Schema.Types.Mixed,
+    type: orderCarSchema,
     default: null,
   },
 });

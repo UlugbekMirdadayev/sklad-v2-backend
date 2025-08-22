@@ -81,7 +81,7 @@ const getFileUrlFromTelegram = async (fileId) => {
       throw new Error("Не удалось получить путь к файлу");
     }
   } catch (error) {
-    console.error("Ошибка при получении файла из Telegram:", error.message);
+    console.error("Ошибка при получении файла из Telegram:", JSON.stringify(error.response?.data || error.message));
     throw error;
   }
 };

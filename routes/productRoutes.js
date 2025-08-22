@@ -463,7 +463,6 @@ router.patch(
   "/:id",
   authMiddleware,
   upload.array("newImages", 10),
-  productValidation,
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

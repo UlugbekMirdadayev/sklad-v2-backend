@@ -482,6 +482,9 @@ router.post("/", orderValidation, async (req, res) => {
 
     // Qarzdorlikni faqat "completed" statusda mijozga qo'shish
     const debtTotal = (debtAmount.usd || 0) + (debtAmount.uzs || 0);
+    // ПРИМЕЧАНИЕ: Логика обновления долгов перенесена в SMS сервис (sendOrderCreatedSMS)
+    // чтобы избежать дублирования и конфликтов
+    /*
     if (paymentType === "debt" && debtTotal > 0) {
       if (!date_returned) {
         return res.status(400).json({
@@ -544,6 +547,7 @@ router.post("/", orderValidation, async (req, res) => {
         }
       }
     }
+    */
 
     // Отправить Socket.IO событие о новом заказе
     const io = req.app.get("io");

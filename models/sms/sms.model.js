@@ -90,6 +90,9 @@ const smsSchema = new mongoose.Schema(
         "service_completion",
         "debt_reminder_3_days",
         "debt_reminder_due_date",
+        "order_created",
+        "order_updated",
+        "order_completed"
       ],
       default: "notification",
     },

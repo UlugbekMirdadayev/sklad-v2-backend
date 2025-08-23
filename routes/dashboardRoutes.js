@@ -48,6 +48,14 @@
  *                         uzs:
  *                           type: number
  *                       description: Буонги даромад
+ *                     todayProfit:
+ *                       type: object
+ *                       properties:
+ *                         usd:
+ *                           type: number
+ *                         uzs:
+ *                           type: number
+ *                       description: Буонги фойда (заказлар ва хизматлар)
  *                     monthlyIncome:
  *                       type: object
  *                       properties:
@@ -185,9 +193,9 @@ async function getServiceMonthlyProfit(start, end) {
 
   // Собираем все productId из сервисов
   const allProductIds = [];
-  services.forEach(s => {
+  services.forEach((s) => {
     if (Array.isArray(s.products)) {
-      s.products.forEach(p => {
+      s.products.forEach((p) => {
         if (p.product) allProductIds.push(p.product.toString());
       });
     }
@@ -197,7 +205,7 @@ async function getServiceMonthlyProfit(start, end) {
   const productsMap = {};
   if (allProductIds.length > 0) {
     const products = await Product.find({ _id: { $in: allProductIds } }).lean();
-    products.forEach(prod => {
+    products.forEach((prod) => {
       productsMap[prod._id.toString()] = prod;
     });
   }
@@ -212,10 +220,59 @@ async function getServiceMonthlyProfit(start, end) {
         if (!prod) continue;
         // Если продукт в USD
         if (prod.currency === "USD") {
-          const profit = ((p.price - prod.costPrice) * p.quantity) || 0;
+          const profit = (p.price - prod.costPrice) * p.quantity || 0;
           totalUsd += profit;
         } else if (prod.currency === "UZS") {
-          const profit = ((p.price - prod.costPrice) * p.quantity) || 0;
+          const profit = (p.price - prod.costPrice) * p.quantity || 0;
+          totalUzs += profit;
+        }
+      }
+    }
+  }
+  return { usd: totalUsd, uzs: totalUzs };
+}
+
+// Функция для расчета прибыли по сервисам за день
+async function getServiceDailyProfit(start, end) {
+  // Получаем все сервисы за день
+  const services = await Service.find({
+    createdAt: { $gte: start, $lt: end },
+    isDeleted: { $ne: true },
+  }).lean();
+
+  // Собираем все productId из сервисов
+  const allProductIds = [];
+  services.forEach((s) => {
+    if (Array.isArray(s.products)) {
+      s.products.forEach((p) => {
+        if (p.product) allProductIds.push(p.product.toString());
+      });
+    }
+  });
+
+  // Получаем себестоимость всех продуктов одним запросом
+  const productsMap = {};
+  if (allProductIds.length > 0) {
+    const products = await Product.find({ _id: { $in: allProductIds } }).lean();
+    products.forEach((prod) => {
+      productsMap[prod._id.toString()] = prod;
+    });
+  }
+
+  // Считаем profit по всем сервисам
+  let totalUsd = 0;
+  let totalUzs = 0;
+  for (const service of services) {
+    if (Array.isArray(service.products)) {
+      for (const p of service.products) {
+        const prod = productsMap[p.product?.toString()];
+        if (!prod) continue;
+        // Если продукт в USD
+        if (prod.currency === "USD") {
+          const profit = (p.price - prod.costPrice) * p.quantity || 0;
+          totalUsd += profit;
+        } else if (prod.currency === "UZS") {
+          const profit = (p.price - prod.costPrice) * p.quantity || 0;
           totalUzs += profit;
         }
       }
@@ -314,6 +371,37 @@ router.get("/summary", async (req, res) => {
       uzs: todayIncomeAgg[0]?.totalUzs || 0,
     };
 
+    // Буонги фойда по заказам (Order)
+    const todayOrderProfitAgg = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: today, $lt: tomorrow },
+          isDeleted: { $ne: true },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalUsd: { $sum: "$profitAmount.usd" },
+          totalUzs: { $sum: "$profitAmount.uzs" },
+        },
+      },
+    ]);
+
+    // Буонги фойда по сервисам (Service)
+    const todayServiceProfit = await getServiceDailyProfit(today, tomorrow);
+
+    const todayOrderProfit = {
+      usd: todayOrderProfitAgg[0]?.totalUsd || 0,
+      uzs: todayOrderProfitAgg[0]?.totalUzs || 0,
+    };
+
+    // Общая прибыль за сегодня (заказы + сервисы)
+    const todayProfit = {
+      usd: todayOrderProfit.usd + todayServiceProfit.usd,
+      uzs: todayOrderProfit.uzs + todayServiceProfit.uzs,
+    };
+
     // Ойлик даромад ва фойда (Transaction'лардан ва Product'лардан)
 
     // Ойлик даромад
@@ -352,7 +440,10 @@ router.get("/summary", async (req, res) => {
     ]);
 
     // Ойлик фойда по сервисам (Service)
-    const serviceMonthlyProfit = await getServiceMonthlyProfit(startofMonth, endofManth);
+    const serviceMonthlyProfit = await getServiceMonthlyProfit(
+      startofMonth,
+      endofManth
+    );
 
     const monthlyIncome = {
       usd: monthlyIncomeAgg[0]?.totalUsd || 0,
@@ -460,7 +551,9 @@ router.get("/summary", async (req, res) => {
           $match: {
             isDeleted: { $ne: true },
             client: { $in: vipClientIds },
-            $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] },
+            $expr: {
+              $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0],
+            },
           },
         },
         {
@@ -478,7 +571,9 @@ router.get("/summary", async (req, res) => {
           $match: {
             isDeleted: { $ne: true },
             client: { $nin: vipClientIds },
-            $expr: { $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0] },
+            $expr: {
+              $gt: [{ $add: ["$currentDebt.usd", "$currentDebt.uzs"] }, 0],
+            },
           },
         },
         {
@@ -596,9 +691,12 @@ router.get("/summary", async (req, res) => {
     const topCards = {
       todayServicesCount,
       todayIncome,
+      todayProfit,
+      todayServiceProfit,
+      todayOrderProfit,
       monthlyIncome,
-      orderMonthlyProfit, // Фойда по заказам
-      serviceMonthlyProfit, // Фойда по сервисам
+      orderMonthlyProfit,
+      serviceMonthlyProfit,
       stockCount,
       lowStockProducts,
       productCapital,

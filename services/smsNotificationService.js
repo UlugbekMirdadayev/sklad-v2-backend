@@ -130,14 +130,16 @@ class SMSNotificationService {
         }
       }
 
-      // Xizmat yaratilgan vaqt
-      const serviceDate = service.createdAt.toLocaleDateString("uz-UZ", {
+      // Xizmat yaratilgan vaqt (O'zbekiston vaqti UTC+5)
+      const uzbekTime = new Date(service.createdAt.getTime() + (5 * 60 * 60 * 1000));
+      
+      const serviceDate = uzbekTime.toLocaleDateString("uz-UZ", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
       });
 
-      const serviceTime = service.createdAt.toLocaleTimeString("uz-UZ", {
+      const serviceTime = uzbekTime.toLocaleTimeString("uz-UZ", {
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -309,14 +311,16 @@ class SMSNotificationService {
         }
       }
 
-      // Xizmat ko'rsatilgan vaqt
-      const serviceDate = service.createdAt.toLocaleDateString("uz-UZ", {
+      // Xizmat ko'rsatilgan vaqt (O'zbekiston vaqti UTC+5)
+      const uzbekTime = new Date(service.createdAt.getTime() + (5 * 60 * 60 * 1000));
+      
+      const serviceDate = uzbekTime.toLocaleDateString("uz-UZ", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
       });
 
-      const serviceTime = service.createdAt.toLocaleTimeString("uz-UZ", {
+      const serviceTime = uzbekTime.toLocaleTimeString("uz-UZ", {
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -796,6 +800,137 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`,
       this.sendReminderOnDueDate(),
     ]);
     console.log("Test yakunlandi");
+  }
+
+  // Order yaratilganda faqat qarzlarni yangilash (SMS yuborilmaydi)
+  async updateClientDebtOnly(orderId) {
+    try {
+      console.log(`Order yaratilganda qarzlar yangilanmoqda. OrderID: ${orderId}`);
+
+      const Order = require("../models/orders/order.model");
+      const Client = require("../models/clients/client.model");
+      const Debtor = require("../models/debtors/debtor.model");
+
+      // Order ma'lumotlarini olish
+      const order = await Order.findById(orderId).populate("client");
+        
+      if (!order) {
+        console.error(`❌ ERROR: Order topilmadi. OrderID: ${orderId}`);
+        return { success: false, message: "Order topilmadi" };
+      }
+
+      if (!order.client) {
+        console.error(`❌ ERROR: Order uchun mijoz topilmadi. OrderID: ${orderId}`);
+        return { success: false, message: "Mijoz topilmadi" };
+      }
+
+      // Eski qarzni topish
+      let previousDebtUsd = 0;
+      let previousDebtUzs = 0;
+      
+      const debtor = await Debtor.findOne({
+        client: order.client._id,
+        status: { $ne: "paid" },
+      });
+
+      if (debtor) {
+        previousDebtUsd = debtor.currentDebt?.usd || 0;
+        previousDebtUzs = debtor.currentDebt?.uzs || 0;
+      }
+
+      // Hozirgi order summasi
+      const currentOrderUsd = order.totalAmount?.usd || 0;
+      const currentOrderUzs = order.totalAmount?.uzs || 0;
+
+      // Jami summa (eski qarz + hozirgi order)
+      const totalUsd = previousDebtUsd + currentOrderUsd;
+      const totalUzs = previousDebtUzs + currentOrderUzs;
+
+      // To'langan summa
+      const paidUsd = order.paidAmount?.usd || 0;
+      const paidUzs = order.paidAmount?.uzs || 0;
+
+      // Qolgan summa (yangi qarz)
+      const remainingUsd = totalUsd - paidUsd;
+      const remainingUzs = totalUzs - paidUzs;
+
+      // Mijozning qarzini yangilash
+      await Client.findByIdAndUpdate(order.client._id, {
+        $set: {
+          "debt.usd": Math.max(0, remainingUsd),
+          "debt.uzs": Math.max(0, remainingUzs),
+        }
+      });
+
+      // Debtor modelini yangilash yoki yaratish
+      if (remainingUsd > 0 || remainingUzs > 0) {
+        if (debtor) {
+          // Mavjud debtor ni yangilash
+          await Debtor.findByIdAndUpdate(debtor._id, {
+            $set: {
+              "currentDebt.usd": Math.max(0, remainingUsd),
+              "currentDebt.uzs": Math.max(0, remainingUzs),
+            },
+            $inc: {
+              "totalPaid.usd": paidUsd,
+              "totalPaid.uzs": paidUzs,
+            }
+          });
+        } else {
+          // Yangi debtor yaratish
+          await Debtor.create({
+            client: order.client._id,
+            currentDebt: {
+              usd: Math.max(0, remainingUsd),
+              uzs: Math.max(0, remainingUzs),
+            },
+            initialDebt: {
+              usd: currentOrderUsd,
+              uzs: currentOrderUzs,
+            },
+            totalPaid: {
+              usd: paidUsd,
+              uzs: paidUzs,
+            },
+            description: `Order #${order._id} uchun qarz`,
+            status: "pending"
+          });
+        }
+      } else if (debtor) {
+        // Agar qarz to'liq to'langan bo'lsa, debtor statusini paid ga o'zgartirish
+        await Debtor.findByIdAndUpdate(debtor._id, {
+          $set: {
+            "currentDebt.usd": 0,
+            "currentDebt.uzs": 0,
+            status: "paid"
+          },
+          $inc: {
+            "totalPaid.usd": paidUsd,
+            "totalPaid.uzs": paidUzs,
+          }
+        });
+      }
+
+      console.log(`✅ SUCCESS: Order ${orderId} uchun qarzlar yangilandi: ${remainingUsd} USD, ${remainingUzs} UZS`);
+      return { 
+        success: true, 
+        message: "Qarzlar muvaffaqiyatli yangilandi",
+        data: {
+          previousDebt: { usd: previousDebtUsd, uzs: previousDebtUzs },
+          currentOrder: { usd: currentOrderUsd, uzs: currentOrderUzs },
+          paid: { usd: paidUsd, uzs: paidUzs },
+          remainingDebt: { usd: remainingUsd, uzs: remainingUzs }
+        }
+      };
+      
+    } catch (error) {
+      console.error("❌ GLOBAL ERROR: Order qarzlarini yangilashda umumiy xatolik:", {
+        error: error.message,
+        orderId: orderId,
+        stack: error.stack
+      });
+      return { success: false, message: error.message };
+    }
   }
 
   // Order yaratilganda SMS yuborish

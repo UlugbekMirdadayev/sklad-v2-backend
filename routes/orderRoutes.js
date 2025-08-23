@@ -480,10 +480,10 @@ router.post("/", orderValidation, async (req, res) => {
       console.error("Telegramga xabar yuborilmadi:", err.message);
     }
 
-    // Qarzdorlikni faqat "completed" statusda mijozga qo'shish
+    // Qarzdorlikni yangilash - SMS yuborilmaydi, faqat qarzlar yangilanadi
     const debtTotal = (debtAmount.usd || 0) + (debtAmount.uzs || 0);
-    // ПРИМЕЧАНИЕ: Логика обновления долгов перенесена в SMS сервис (sendOrderCreatedSMS)
-    // чтобы избежать дублирования и конфликтов
+    // ПРИМЕЧАНИЕ: Старая логика обновления долгов закомментирована
+    // Новая логика - прямое обновление без SMS уведомлений
     /*
     if (paymentType === "debt" && debtTotal > 0) {
       if (!date_returned) {
@@ -562,17 +562,18 @@ router.post("/", orderValidation, async (req, res) => {
       emitNewOrder(io, orderWithIndex);
     }
 
-    // Отправить SMS о создании заказа
-    try {
-      smsNotificationService.sendOrderCreatedSMS(order._id)
-        .then(result => {
-          console.log(`Order ${order._id} yaratildi. SMS yuborish natijasi:`, result);
-        })
-        .catch(error => {
-          console.error(`Order ${order._id} uchun SMS yuborishda xatolik:`, error);
-        });
-    } catch (smsError) {
-      console.error(`Order ${order._id} uchun SMS xizmatini chaqirishda xatolik:`, smsError);
+    // Обновить долги клиента и должника при создании заказа
+    if (debtAmount && (debtAmount.usd > 0 || debtAmount.uzs > 0) && clientId) {
+      try {
+        const result = await smsNotificationService.updateClientDebtOnly(order._id);
+        if (result.success) {
+          console.log(`Order ${order._id} uchun qarzlar muvaffaqiyatli yangilandi`);
+        } else {
+          console.error(`Order ${order._id} uchun qarzlarni yangilashda xatolik: ${result.message}`);
+        }
+      } catch (debtError) {
+        console.error(`Order ${order._id} uchun qarzlarni yangilashda xatolik:`, debtError);
+      }
     }
 
     res.status(201).json(order);

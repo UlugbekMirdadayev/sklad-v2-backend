@@ -14,6 +14,7 @@ const TELEGRAM_CHAT_ID = "-1002798343078"; // o'zingizning chat_id yoki group_id
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 const { emitNewOrder, emitOrderUpdate } = require("../utils/socketEvents");
 const smsNotificationService = require('../services/smsNotificationService');
+const TransactionHelper = require('../utils/transactionHelper');
 
 // Order validation
 const orderValidation = [
@@ -430,19 +431,9 @@ router.post("/", orderValidation, async (req, res) => {
       { path: "client" },
     ]);
 
-    // Transaction yaratish
+    // Transaction yaratish TransactionHelper orqali
     try {
-      await Transaction.create({
-        type: "order",
-        amount: paidAmount,
-        paymentType: paymentType === "debt" ? "debt" : paymentType,
-        description: `Order #${order._id} - ${products.length} mahsulot`,
-        relatedModel: "Order",
-        relatedId: order._id,
-        client: clientId || null,
-        branch: branch,
-        createdBy: req.user?.id || null,
-      });
+      await TransactionHelper.createOrderTransaction(order);
     } catch (transactionError) {
       console.error(
         "Transaction yaratishda xatolik:",
@@ -885,12 +876,26 @@ router.patch("/:id", orderValidation, async (req, res) => {
       }
     }
 
+    // Старые данные заказа для сравнения
+    const oldOrder = {
+      paidAmount: order.paidAmount,
+      paymentType: order.paymentType,
+      status: order.status
+    };
+
     Object.assign(order, req.body);
     if (products) {
       order.products = products;
     }
     order.profitAmount = profitAmount;
     await order.save();
+
+    // Обновляем связанные транзакции
+    try {
+      await TransactionHelper.updateOrderTransaction(order._id, order, oldOrder);
+    } catch (transactionError) {
+      console.error("Transaction yangilashda xatolik:", transactionError.message);
+    }
 
     res.json(order);
   } catch (error) {
@@ -989,6 +994,15 @@ router.patch(
 
       order.status = status;
       await order.save();
+
+      // Если заказ отменяется, обновляем связанные транзакции
+      if (status === "cancelled" && oldStatus !== "cancelled") {
+        try {
+          await TransactionHelper.handleOrderDeletionOrCancellation(order._id, "cancelled");
+        } catch (transactionError) {
+          console.error("Transaction bekor qilishda xatolik:", transactionError.message);
+        }
+      }
 
       // Отправить Socket.IO событие об обновлении заказа
       const io = req.app.get("io");
@@ -1149,6 +1163,13 @@ router.delete("/:id", async (req, res) => {
     // Soft delete
     order.isDeleted = true;
     await order.save();
+
+    // Обновляем связанные транзакции (помечаем как удаленные)
+    try {
+      await TransactionHelper.handleOrderDeletionOrCancellation(order._id, "deleted");
+    } catch (transactionError) {
+      console.error("Transaction o'chirishda xatolik:", transactionError.message);
+    }
 
     res.json({ message: "Заказ удален" });
   } catch (error) {

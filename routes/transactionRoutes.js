@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Transaction = require("../models/transactions/transaction.model");
 const Client = require("../models/clients/client.model");
+const TransactionHelper = require('../utils/transactionHelper');
 
 // 📊 Oylik kirim/chiqim statistikasi
 router.get("/", async (req, res) => {
@@ -337,5 +338,69 @@ router.get("/statistics/monthly-transactions", async (req, res) => {
  *       200:
  *         description: Месячная статистика
  */
+
+// 📊 Mijoz uchun transaction balance
+router.get("/balance/:clientId", async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const balance = await TransactionHelper.calculateClientTransactionBalance(clientId);
+    res.json(balance);
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Client transaction balance hisoblashda xatolik", 
+      error: error.message 
+    });
+  }
+});
+
+// 📊 Transaction statistics (yangi)
+router.get("/statistics/advanced", async (req, res) => {
+  try {
+    const { startDate, endDate, branch } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        message: "startDate va endDate parametrlari majburiy"
+      });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    const statistics = await TransactionHelper.getTransactionStatistics(start, end, branch);
+    res.json(statistics);
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Transaction statistics olishda xatolik", 
+      error: error.message 
+    });
+  }
+});
+
+// 🔍 Related transactions - order/service/debtor bilan bog'langan transaction'lar
+router.get("/related/:modelType/:modelId", async (req, res) => {
+  try {
+    const { modelType, modelId } = req.params;
+    
+    if (!["Order", "Service", "Debtor"].includes(modelType)) {
+      return res.status(400).json({
+        message: "modelType faqat Order, Service yoki Debtor bo'lishi mumkin"
+      });
+    }
+
+    const transactions = await Transaction.find({
+      relatedModel: modelType,
+      relatedId: modelId,
+      isDeleted: false
+    }).populate('client branch createdBy').sort({ createdAt: -1 });
+
+    res.json(transactions);
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Related transactions olishda xatolik", 
+      error: error.message 
+    });
+  }
+});
 
 module.exports = router;

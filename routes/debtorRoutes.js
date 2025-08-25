@@ -5,6 +5,7 @@ const Transaction = require("../models/transactions/transaction.model");
 const Client = require("../models/clients/client.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
+const TransactionHelper = require('../utils/transactionHelper');
 
 /**
  * @swagger
@@ -489,22 +490,17 @@ router.post("/:id/payment", authMiddleware, async (req, res) => {
 
     await debtor.save();
 
-    // To'lov Transaction'ini qo'shish
+    // To'lov Transaction'ini TransactionHelper orqali qo'shish
     try {
-      await Transaction.create({
-        type: "debt-payment",
-        amount: payment,
-        paymentType: "cash", // Default, kerak bo'lsa req.body'dan olish mumkin
-        description: `Qarz to'lovi - Debtor #${debtor._id}`,
-        relatedModel: "Debtor",
-        relatedId: debtor._id,
-        client: debtor.client,
-        branch: null, // Kerak bo'lsa.req.body'dan olish mumkin
-        createdBy: req.user?.id || null,
-      });
+      await TransactionHelper.createDebtPaymentTransaction(
+        debtor, 
+        payment, 
+        req.body.paymentType || "cash",
+        `Qarz to'lovi - ${debtor.description || 'Qarzdor #' + debtor._id}`
+      );
     } catch (transactionError) {
       console.error(
-        "Transaction yaratishda xatolik:",
+        "Debt payment transaction yaratishda xatolik:",
         transactionError.message
       );
     }

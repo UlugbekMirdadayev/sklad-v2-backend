@@ -5,6 +5,7 @@ const Transaction = require("../models/transactions/transaction.model");
 const Client = require("../models/clients/client.model");
 const { emitNewService, emitServiceUpdate } = require("../utils/socketEvents");
 const smsNotificationService = require('../services/smsNotificationService');
+const TransactionHelper = require('../utils/transactionHelper');
 /**
  * @swagger
  * tags:
@@ -185,24 +186,12 @@ router.post("/", async (req, res) => {
 
     await service.save();
 
-    // Transaction yaratish
+    // Transaction yaratish TransactionHelper orqali
     try {
-      await Transaction.create({
-        type: "service",
-        amount: service.totalPrice || { usd: 0, uzs: 0 },
-        paymentType: "cash", // Default, kerak bo'lsa req.body'dan olish mumkin
-        description: `Service #${service._id} - ${
-          service.serviceType || "Xizmat"
-        }`,
-        relatedModel: "Service",
-        relatedId: service._id,
-        client: service.client || null,
-        branch: service.branch || null,
-        createdBy: service.createdBy || null,
-      });
+      await TransactionHelper.createServiceTransaction(service);
     } catch (transactionError) {
       console.error(
-        "Transaction yaratishda xatolik:",
+        "Service transaction yaratishda xatolik:",
         transactionError.message
       );
     }
@@ -386,6 +375,13 @@ router.put("/:id", async (req, res) => {
     );
     if (!service) return res.status(404).json({ error: "Service not found" });
     
+    // Обновляем связанные транзакции
+    try {
+      await TransactionHelper.updateServiceTransaction(req.params.id, service, oldService);
+    } catch (transactionError) {
+      console.error("Service transaction yangilashda xatolik:", transactionError.message);
+    }
+    
     // Отправить Socket.IO событие об обновлении услуги
     const io = req.app.get('io');
     if (io) {
@@ -426,7 +422,56 @@ router.delete("/:id", async (req, res) => {
       { new: true }
     );
     if (!service) return res.status(404).json({ error: "Service not found" });
+    
+    // Обновляем связанные транзакции (помечаем как удаленные)
+    try {
+      await TransactionHelper.handleServiceDeletionOrCancellation(req.params.id, "deleted");
+    } catch (transactionError) {
+      console.error("Service transaction o'chirishda xatolik:", transactionError.message);
+    }
+    
     res.json({ message: "Service deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /services/:id/status - обновление статуса сервиса
+router.patch("/:id/status", async (req, res) => {
+  try {
+    const { status } = req.body;
+    
+    if (!status || !["new", "in_progress", "completed", "cancelled"].includes(status)) {
+      return res.status(400).json({ 
+        error: "Неверный статус. Доступные: new, in_progress, completed, cancelled" 
+      });
+    }
+
+    const oldService = await Service.findById(req.params.id);
+    if (!oldService) {
+      return res.status(404).json({ error: "Service не найден" });
+    }
+
+    const oldStatus = oldService.status;
+    oldService.status = status;
+    await oldService.save();
+
+    // Если сервис отменяется, обновляем связанные транзакции
+    if (status === "cancelled" && oldStatus !== "cancelled") {
+      try {
+        await TransactionHelper.handleServiceDeletionOrCancellation(req.params.id, "cancelled");
+      } catch (transactionError) {
+        console.error("Service transaction bekor qilishda xatolik:", transactionError.message);
+      }
+    }
+
+    // Отправить Socket.IO событие об обновлении статуса услуги
+    const io = req.app.get('io');
+    if (io) {
+      emitServiceUpdate(io, oldService);
+    }
+
+    res.json(oldService);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -371,12 +371,13 @@ router.get("/summary", async (req, res) => {
       uzs: todayIncomeAgg[0]?.totalUzs || 0,
     };
 
-    // Буонги фойда по заказам (Order)
+    // Буонги фойда по заказам (Order) - только completed
     const todayOrderProfitAgg = await Order.aggregate([
       {
         $match: {
           createdAt: { $gte: today, $lt: tomorrow },
           isDeleted: { $ne: true },
+          status: "completed", // Только completed заказы
         },
       },
       {
@@ -422,12 +423,13 @@ router.get("/summary", async (req, res) => {
       },
     ]);
 
-    // Ойлик фойда по заказам (Order)
+    // Ойлик фойда по заказам (Order) - только completed
     const orderMonthlyProfitAgg = await Order.aggregate([
       {
         $match: {
           createdAt: { $gte: startofMonth, $lt: endofManth },
           isDeleted: { $ne: true },
+          status: "completed", // Только completed заказы
         },
       },
       {

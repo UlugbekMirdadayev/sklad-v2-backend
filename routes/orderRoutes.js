@@ -13,8 +13,8 @@ const TELEGRAM_TOKEN = "8178295781:AAHsA6ZRWFrYhXItqb1iPHskoJGweMoqk_I";
 const TELEGRAM_CHAT_ID = "-1002798343078"; // o'zingizning chat_id yoki group_id
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 const { emitNewOrder, emitOrderUpdate } = require("../utils/socketEvents");
-const smsNotificationService = require('../services/smsNotificationService');
-const TransactionHelper = require('../utils/transactionHelper');
+const smsNotificationService = require("../services/smsNotificationService");
+const TransactionHelper = require("../utils/transactionHelper");
 
 // Order validation
 const orderValidation = [
@@ -70,10 +70,6 @@ const orderValidation = [
     .isIn(["cash", "card", "debt"])
     .withMessage("Неверный метод оплаты"),
   body("notes").optional().trim(),
-  body("date_returned")
-    .optional({ nullable: true })
-    .isISO8601()
-    .withMessage("Noto'g'ri sana formati"),
 ];
 
 /**
@@ -124,9 +120,6 @@ const orderValidation = [
  *                 enum: [cash, card, debt]
  *               notes:
  *                 type: string
- *               date_returned:
- *                 type: string
- *                 format: date
  *     responses:
  *       201:
  *         description: Заказ создан
@@ -231,9 +224,6 @@ const orderValidation = [
  *                 enum: [cash, card, debt]
  *               notes:
  *                 type: string
- *               date_returned:
- *                 type: string
- *                 format: date
  *               status:
  *                 type: string
  *     responses:
@@ -473,73 +463,6 @@ router.post("/", orderValidation, async (req, res) => {
 
     // Qarzdorlikni yangilash - SMS yuborilmaydi, faqat qarzlar yangilanadi
     const debtTotal = (debtAmount.usd || 0) + (debtAmount.uzs || 0);
-    // ПРИМЕЧАНИЕ: Старая логика обновления долгов закомментирована
-    // Новая логика - прямое обновление без SMS уведомлений
-    /*
-    if (paymentType === "debt" && debtTotal > 0) {
-      if (!date_returned) {
-        return res.status(400).json({
-          message: "Qarz buyurtmalar uchun 'date_returned' majburiy.",
-        });
-      }
-
-      // Debtor record (har doim yoziladi, lekin mijozga debt faqat completed bo'lsa)
-
-      if (clientId) {
-        let existingDebtor = await Debtor.findOne({
-          client: clientId,
-          branch,
-          status: { $ne: "paid" },
-        });
-
-        if (existingDebtor) {
-          existingDebtor.totalDebt = {
-            usd: (existingDebtor.totalDebt?.usd || 0) + (debtAmount.usd || 0),
-            uzs: (existingDebtor.totalDebt?.uzs || 0) + (debtAmount.uzs || 0),
-          };
-          existingDebtor.remainingDebt = {
-            usd:
-              (existingDebtor.remainingDebt?.usd || 0) + (debtAmount.usd || 0),
-            uzs:
-              (existingDebtor.remainingDebt?.uzs || 0) + (debtAmount.uzs || 0),
-          };
-          existingDebtor.description += `\n[+${debtAmount.usd || 0} USD, +${
-            debtAmount.uzs || 0
-          } UZS] Yangi buyurtma`;
-          if (
-            new Date(date_returned) > new Date(existingDebtor.date_returned)
-          ) {
-            existingDebtor.date_returned = date_returned;
-          }
-          await existingDebtor.save();
-        } else {
-          const newDebtor = new Debtor({
-            client: clientId,
-            branch,
-            order: order._id,
-            totalDebt: debtAmount,
-            paidAmount: { usd: 0, uzs: 0 },
-            remainingDebt: debtAmount,
-            description: req.body.notes || "",
-            date_returned,
-            status: "pending",
-          });
-          await newDebtor.save();
-        }
-
-        // Client.debt faqat completed bo'lsa
-        if (status === "completed") {
-          await Client.findByIdAndUpdate(clientId, {
-            $inc: {
-              "debt.usd": debtAmount.usd || 0,
-              "debt.uzs": debtAmount.uzs || 0,
-            },
-          });
-        }
-      }
-    }
-    */
-
     // Отправить Socket.IO событие о новом заказе
     const io = req.app.get("io");
     if (io) {
@@ -556,14 +479,23 @@ router.post("/", orderValidation, async (req, res) => {
     // Обновить долги клиента и должника при создании заказа
     if (debtAmount && (debtAmount.usd > 0 || debtAmount.uzs > 0) && clientId) {
       try {
-        const result = await smsNotificationService.updateClientDebtOnly(order._id);
+        const result = await smsNotificationService.updateClientDebtOnly(
+          order._id
+        );
         if (result.success) {
-          console.log(`Order ${order._id} uchun qarzlar muvaffaqiyatli yangilandi`);
+          console.log(
+            `Order ${order._id} uchun qarzlar muvaffaqiyatli yangilandi`
+          );
         } else {
-          console.error(`Order ${order._id} uchun qarzlarni yangilashda xatolik: ${result.message}`);
+          console.error(
+            `Order ${order._id} uchun qarzlarni yangilashda xatolik: ${result.message}`
+          );
         }
       } catch (debtError) {
-        console.error(`Order ${order._id} uchun qarzlarni yangilashda xatolik:`, debtError);
+        console.error(
+          `Order ${order._id} uchun qarzlarni yangilashda xatolik:`,
+          debtError
+        );
       }
     }
 
@@ -816,30 +748,40 @@ router.patch("/:id", orderValidation, async (req, res) => {
 
     // Qarzdorlik o‘zgarishini hisoblash: faqat completed -> completed, completed->pending/cancelled, pending->completed
     let debtDiff = 0;
-    if (paymentType === "debt") {
-      if (oldStatus !== "completed" && newStatus === "completed") {
-        // pending->completed: debt qo'shish
-        debtDiff = newDebt;
-      } else if (oldStatus === "completed" && newStatus !== "completed") {
-        // completed->pending/cancelled: debt kamaytirish
-        debtDiff = -oldDebt;
-      } else if (oldStatus === "completed" && newStatus === "completed") {
-        // completed edi, completed bo'lib qoldi: farqini hisobla
-        debtDiff = newDebt - oldDebt;
-      }
+    if (oldStatus !== "completed" && newStatus === "completed") {
+      // pending->completed: debt qo'shish
+      debtDiff = newDebt;
+    } else if (oldStatus === "completed" && newStatus !== "completed") {
+      // completed->pending/cancelled: debt kamaytirish
+      debtDiff = -oldDebt;
+    } else if (oldStatus === "completed" && newStatus === "completed") {
+      // completed edi, completed bo'lib qoldi: farqini hisobla
+      debtDiff = newDebt - oldDebt;
     }
 
     // Mijozning qarzini yangilash faqat completed bo'lsa yoki completed'dan chiqsa
     if (debtDiff !== 0) {
       const clientDoc = await Client.findById(order.client);
       if (clientDoc) {
-        clientDoc.debt += debtDiff;
+        // Debt obyekt sifatida ishlash
+        if (!clientDoc.debt) {
+          clientDoc.debt = { usd: 0, uzs: 0 };
+        }
+        // debtDiff faqat USD uchun hisoblangan, lekin bizga to'liq obyekt kerak
+        // Shuning uchun yangi mantiq qo'llaymiz - to'g'ridan to'g'ri order debt amount ga tenglash
+        if (newStatus === "completed") {
+          clientDoc.debt.usd = newDebt.usd || 0;
+          clientDoc.debt.uzs = newDebt.uzs || 0;
+        } else {
+          clientDoc.debt.usd = 0;
+          clientDoc.debt.uzs = 0;
+        }
         await clientDoc.save();
       }
     }
 
     // Debtor hujjatini yangilash yoki yaratish (har doim)
-    if (paymentType === "debt" && newDebt > 0) {
+    if (newDebt && (newDebt.usd > 0 || newDebt.uzs > 0)) {
       let debtor = await Debtor.findOne({ order: order._id });
 
       if (debtor) {
@@ -855,12 +797,6 @@ router.patch("/:id", orderValidation, async (req, res) => {
             : "pending";
         await debtor.save();
       } else {
-        if (!date_returned) {
-          return res.status(400).json({
-            message: "Qarz buyurtmalar uchun 'date_returned' majburiy.",
-          });
-        }
-
         const newDebtor = new Debtor({
           client: order.client,
           branch: order.branch,
@@ -882,9 +818,11 @@ router.patch("/:id", orderValidation, async (req, res) => {
       paymentType: order.paymentType,
       status: order.status,
       debtAmount: order.debtAmount,
-      totalAmount: order.totalAmount
+      totalAmount: order.totalAmount,
     };
 
+    const oldStatusForUpdate = order.status; // Eski status ni saqlaymiz
+    
     Object.assign(order, req.body);
     if (products) {
       order.products = products;
@@ -892,50 +830,47 @@ router.patch("/:id", orderValidation, async (req, res) => {
     order.profitAmount = profitAmount;
     await order.save();
 
-    // Обновляем связанные транзакции
-    try {
-      await TransactionHelper.updateOrderTransaction(order._id, order, oldOrder);
-    } catch (transactionError) {
-      console.error("Transaction yangilashda xatolik:", transactionError.message);
+    // Status o'zgarganda debt ni yangilash
+    if (oldStatusForUpdate !== order.status && order.client) {
+      if (order.status === "completed" && (order.debtAmount?.usd > 0 || order.debtAmount?.uzs > 0)) {
+        // Status completed ga o'zgarsa va debt bor bo'lsa
+        try {
+          const result = await smsNotificationService.updateClientDebtOnly(order._id);
+          if (result.success) {
+            console.log(`Order ${order._id} PATCH da status ${oldStatusForUpdate} dan ${order.status} ga o'zgartirilganda qarzlar muvaffaqiyatli yangilandi`);
+          } else {
+            console.error(`Order ${order._id} PATCH da status o'zgartirilganda qarzlarni yangilashda xatolik: ${result.message}`);
+          }
+        } catch (debtError) {
+          console.error(`Order ${order._id} PATCH da status o'zgartirilganda qarzlarni yangilashda xatolik:`, debtError);
+        }
+      } else if (order.status !== "completed") {
+        // Status completed emas bo'lsa (cancelled yoki pending), faqat ushbu order qarzini kamaytirish
+        try {
+          const result = await smsNotificationService.removeOrderDebtOnly(order._id);
+          if (result.success) {
+            console.log(`Order ${order._id} PATCH da status ${order.status} ga o'zgartirilganda ushbu order qarzi muvaffaqiyatli kamaytirdi`);
+          } else {
+            console.error(`Order ${order._id} PATCH da status ${order.status} ga o'zgartirilganda order qarzini kamayttirishda xatolik: ${result.message}`);
+          }
+        } catch (debtError) {
+          console.error(`Order ${order._id} PATCH da status ${order.status} ga o'zgartirilganda order qarzini kamayttirishda xatolik:`, debtError);
+        }
+      }
     }
 
-    // Обновить долги клиента и должника при обновлении заказа
-    if (order.debtAmount && (order.debtAmount.usd > 0 || order.debtAmount.uzs > 0) && order.client) {
-      try {
-        const result = await smsNotificationService.updateClientDebtOnly(order._id);
-        if (result.success) {
-          console.log(`Order ${order._id} yangilanganda qarzlar muvaffaqiyatli yangilandi`);
-        } else {
-          console.error(`Order ${order._id} yangilanganda qarzlarni yangilashda xatolik: ${result.message}`);
-        }
-      } catch (debtError) {
-        console.error(`Order ${order._id} yangilanganda qarzlarni yangilashda xatolik:`, debtError);
-      }
-    } else if (order.client) {
-      // Agar debt yo'q bo'lsa yoki 0 bo'lsa, mijozning qarzini 0 ga tenglashtirish va debtor statusini paid ga o'zgartirish
-      try {
-        await Client.findByIdAndUpdate(order.client, {
-          $set: {
-            "debt.usd": 0,
-            "debt.uzs": 0,
-          }
-        });
-
-        await Debtor.updateMany(
-          { client: order.client, status: { $ne: "paid" } },
-          {
-            $set: {
-              "currentDebt.usd": 0,
-              "currentDebt.uzs": 0,
-              status: "paid"
-            }
-          }
-        );
-        
-        console.log(`Order ${order._id} yangilanganda mijoz qarzlari 0 ga tenglashtirildi`);
-      } catch (debtError) {
-        console.error(`Order ${order._id} yangilanganda qarzlarni 0 ga tenglashtirishda xatolik:`, debtError);
-      }
+    // Обновляем связанные транзакции
+    try {
+      await TransactionHelper.updateOrderTransaction(
+        order._id,
+        order,
+        oldOrder
+      );
+    } catch (transactionError) {
+      console.error(
+        "Transaction yangilashda xatolik:",
+        transactionError.message
+      );
     }
 
     res.json(order);
@@ -991,13 +926,9 @@ router.patch(
           }
         }
 
-        // Debt faqat completedga o'tganda qo'shiladi
-        if (order.paymentType === "debt" && order.debtAmount > 0) {
-          const clientDoc = await Client.findById(order.client);
-          if (clientDoc) {
-            clientDoc.debt += order.debtAmount;
-            await clientDoc.save();
-          }
+        // Debt faqat completedga o'tganda product quantity kamaytirish
+        if (order.debtAmount?.usd > 0 || order.debtAmount?.uzs > 0) {
+          console.log(`Status completed ga o'tganda - debt umumiy logika orqali handle qilinadi`);
         }
       }
       // canceldan completedga qaytsa ham kamaytirish va debt qo'shish (ya'ni completedga o'tsa har doim)
@@ -1014,21 +945,26 @@ router.patch(
             await product.save();
           }
         }
-        if (order.paymentType === "debt" && order.debtAmount > 0) {
-          const clientDoc = await Client.findById(order.client);
-          if (clientDoc) {
-            clientDoc.debt += order.debtAmount;
-            await clientDoc.save();
-          }
+        if (order.debtAmount?.usd > 0 || order.debtAmount?.uzs > 0) {
+          console.log(`Cancelled dan completed ga o'tganda - debt umumiy logika orqali handle qilinadi`);
         }
       }
-      // completed dan boshqa statusga o'tsa (pending yoki cancelled) va debt bo'lsa, debtni kamaytirish
+      // completed dan boshqa statusga o'tsa (pending yoki cancelled), faqat ushbu order qarzini kamaytirish
       else if (oldStatus === "completed" && status !== "completed") {
-        if (order.paymentType === "debt" && order.debtAmount > 0) {
-          const clientDoc = await Client.findById(order.client);
-          if (clientDoc) {
-            clientDoc.debt -= order.debtAmount;
-            await clientDoc.save();
+        if (order.debtAmount?.usd > 0 || order.debtAmount?.uzs > 0) {
+          // Faqat ushbu order qarzini kamaytirish (boshqa orderlar qarzini saqlash)
+          try {
+            const result = await smsNotificationService.removeOrderDebtOnly(order._id);
+            if (result.success) {
+              console.log(`Order ${order._id} completed dan ${status} ga o'tganda ushbu order qarzi muvaffaqiyatli kamaytirdi`);
+            } else {
+              console.error(`Order ${order._id} completed dan ${status} ga o'tganda order qarzini kamayttirishda xatolik: ${result.message}`);
+            }
+          } catch (debtError) {
+            console.error(
+              `Order ${order._id} completed dan ${status} ga o'tganda order qarzini kamayttirishda xatolik:`,
+              debtError
+            );
           }
         }
       }
@@ -1036,13 +972,47 @@ router.patch(
       order.status = status;
       await order.save();
 
-      // Если заказ отменяется, обновляем связанные транзакции
+      // Status o'zgargandan so'ng debt yangilash
+      if (order.client && (order.debtAmount?.usd > 0 || order.debtAmount?.uzs > 0)) {
+        try {
+          const result = await smsNotificationService.updateClientDebtOnly(order._id);
+          if (result.success) {
+            console.log(`Order ${order._id} status ${oldStatus} dan ${status} ga o'zgartirilganda qarzlar muvaffaqiyatli yangilandi`);
+          } else {
+            console.error(`Order ${order._id} status o'zgartirilganda qarzlarni yangilashda xatolik: ${result.message}`);
+          }
+        } catch (debtError) {
+          console.error(`Order ${order._id} status o'zgartirilganda qarzlarni yangilashda xatolik:`, debtError);
+        }
+      } else if (order.client && status !== "completed") {
+        // Agar status completed emas bo'lsa (cancelled yoki pending), faqat ushbu order qarzini kamaytirish
+        try {
+          const result = await smsNotificationService.removeOrderDebtOnly(order._id);
+          if (result.success) {
+            console.log(`Order ${order._id} status ${status} ga o'zgartirilganda ushbu order qarzi muvaffaqiyatli kamaytirdi`);
+          } else {
+            console.error(`Order ${order._id} status ${status} ga o'zgartirilganda order qarzini kamayttirishda xatolik: ${result.message}`);
+          }
+        } catch (debtError) {
+          console.error(`Order ${order._id} status ${status} ga o'zgartirilganda order qarzini kamayttirishda xatolik:`, debtError);
+        }
+      }
+
+      // Если заказ отменяется, обновляем связанные транзакции и qarzlarni olib tashlaymiz
       if (status === "cancelled" && oldStatus !== "cancelled") {
         try {
-          await TransactionHelper.handleOrderDeletionOrCancellation(order._id, "cancelled");
+          await TransactionHelper.handleOrderDeletionOrCancellation(
+            order._id,
+            "cancelled"
+          );
         } catch (transactionError) {
-          console.error("Transaction bekor qilishda xatolik:", transactionError.message);
+          console.error(
+            "Transaction bekor qilishda xatolik:",
+            transactionError.message
+          );
         }
+
+        // Transaction logics tugadi, debt handling yuqorida bajarildi
       }
 
       // Отправить Socket.IO событие об обновлении заказа
@@ -1189,7 +1159,10 @@ router.delete("/:id", async (req, res) => {
       }
 
       // Agar debt bo'lsa, mijozdan debtni kamaytirish
-      if (order.paymentType === "debt" && order.debtAmount) {
+      if (
+        order.debtAmount &&
+        (order.debtAmount.usd > 0 || order.debtAmount.uzs > 0)
+      ) {
         const clientDoc = await Client.findById(order.client);
         if (clientDoc) {
           clientDoc.debt = {
@@ -1207,9 +1180,15 @@ router.delete("/:id", async (req, res) => {
 
     // Обновляем связанные транзакции (помечаем как удаленные)
     try {
-      await TransactionHelper.handleOrderDeletionOrCancellation(order._id, "deleted");
+      await TransactionHelper.handleOrderDeletionOrCancellation(
+        order._id,
+        "deleted"
+      );
     } catch (transactionError) {
-      console.error("Transaction o'chirishda xatolik:", transactionError.message);
+      console.error(
+        "Transaction o'chirishda xatolik:",
+        transactionError.message
+      );
     }
 
     res.json({ message: "Заказ удален" });

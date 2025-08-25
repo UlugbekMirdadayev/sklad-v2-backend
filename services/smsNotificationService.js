@@ -824,44 +824,75 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`,
         return { success: false, message: "Mijoz topilmadi" };
       }
 
-      // Mavjud debtor yozuvini topish
-      let debtor = await Debtor.findOne({
-        client: order.client._id,
-        status: { $ne: "paid" },
-      });
-
       // Order qarz miqdori
       const orderDebtUsd = order.debtAmount?.usd || 0;
       const orderDebtUzs = order.debtAmount?.uzs || 0;
       const orderPaidUsd = order.paidAmount?.usd || 0;
       const orderPaidUzs = order.paidAmount?.uzs || 0;
 
-      // Agar order da debt bor bo'lsa
-      if (orderDebtUsd > 0 || orderDebtUzs > 0) {
-        // Mijozning qarzini to'g'ridan to'g'ri order debt amount ga tenglash
-        await Client.findByIdAndUpdate(order.client._id, {
+      console.log(`Order debt: ${orderDebtUsd} USD, ${orderDebtUzs} UZS`);
+
+      // Agar order da debt bor bo'lsa (status "completed" bo'lganda debt hisoblanadi)
+      if ((orderDebtUsd > 0 || orderDebtUzs > 0) && order.status === "completed") {
+        // 1. Mijozning mavjud qarzini olish
+        const currentClient = await Client.findById(order.client._id);
+        const currentClientDebtUsd = currentClient.debt?.usd || 0;
+        const currentClientDebtUzs = currentClient.debt?.uzs || 0;
+
+        // Yangi umumiy qarz = eski qarz + yangi order qarz
+        const newTotalDebtUsd = currentClientDebtUsd + orderDebtUsd;
+        const newTotalDebtUzs = currentClientDebtUzs + orderDebtUzs;
+
+        // Client ni yangi umumiy qarz bilan yangilash
+        const updatedClient = await Client.findByIdAndUpdate(order.client._id, {
           $set: {
-            "debt.usd": orderDebtUsd,
-            "debt.uzs": orderDebtUzs,
+            "debt.usd": newTotalDebtUsd,
+            "debt.uzs": newTotalDebtUzs,
           }
+        }, { new: true });
+
+        if (!updatedClient) {
+          console.error(`❌ ERROR: Client yangilanmadi. ClientID: ${order.client._id}`);
+          return { success: false, message: "Client yangilanmadi" };
+        }
+
+        console.log(`✅ Client debt yangilandi: eski(${currentClientDebtUsd} USD, ${currentClientDebtUzs} UZS) + yangi(${orderDebtUsd} USD, ${orderDebtUzs} UZS) = jami(${newTotalDebtUsd} USD, ${newTotalDebtUzs} UZS)`);
+
+        // 2. Debtor yozuvini topish
+        let debtor = await Debtor.findOne({
+          client: order.client._id,
+          status: { $ne: "paid" }
         });
 
-        // Debtor yozuvini yangilash yoki yaratish
         if (debtor) {
-          // Mavjud debtor ni yangilash
-          await Debtor.findByIdAndUpdate(debtor._id, {
+          // Mavjud debtor ni yangilash - eski qarzga yangi qarzni qo'shish
+          const currentDebtorDebtUsd = debtor.currentDebt?.usd || 0;
+          const currentDebtorDebtUzs = debtor.currentDebt?.uzs || 0;
+          
+          const newDebtorTotalUsd = currentDebtorDebtUsd + orderDebtUsd;
+          const newDebtorTotalUzs = currentDebtorDebtUzs + orderDebtUzs;
+
+          const updatedDebtor = await Debtor.findByIdAndUpdate(debtor._id, {
             $set: {
-              "currentDebt.usd": orderDebtUsd,
-              "currentDebt.uzs": orderDebtUzs,
-              "initialDebt.usd": orderDebtUsd,
-              "initialDebt.uzs": orderDebtUzs,
-              description: `Order #${order._id} uchun qarz`,
-              status: "pending"
+              "currentDebt.usd": newDebtorTotalUsd,
+              "currentDebt.uzs": newDebtorTotalUzs,
+              "initialDebt.usd": debtor.initialDebt.usd + orderDebtUsd,
+              "initialDebt.uzs": debtor.initialDebt.uzs + orderDebtUzs,
+              description: `${debtor.description}; Order #${order._id} uchun +${orderDebtUsd} USD, +${orderDebtUzs} UZS`,
+              status: "pending",
+              initialDebtDate: debtor.initialDebtDate || new Date()
             }
-          });
+          }, { new: true });
+
+          if (!updatedDebtor) {
+            console.error(`❌ ERROR: Debtor yangilanmadi. DebtorID: ${debtor._id}`);
+            return { success: false, message: "Debtor yangilanmadi" };
+          }
+
+          console.log(`✅ Mavjud debtor yangilandi: eski(${currentDebtorDebtUsd} USD, ${currentDebtorDebtUzs} UZS) + yangi(${orderDebtUsd} USD, ${orderDebtUzs} UZS) = jami(${newDebtorTotalUsd} USD, ${newDebtorTotalUzs} UZS)`);
         } else {
           // Yangi debtor yaratish
-          await Debtor.create({
+          const newDebtor = await Debtor.create({
             client: order.client._id,
             currentDebt: {
               usd: orderDebtUsd,
@@ -871,6 +902,7 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`,
               usd: orderDebtUsd,
               uzs: orderDebtUzs,
             },
+            initialDebtDate: new Date(),
             totalPaid: {
               usd: 0,
               uzs: 0,
@@ -878,18 +910,40 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`,
             description: `Order #${order._id} uchun qarz`,
             status: "pending"
           });
+
+          if (!newDebtor) {
+            console.error(`❌ ERROR: Yangi debtor yaratilmadi`);
+            return { success: false, message: "Yangi debtor yaratilmadi" };
+          }
+
+          console.log(`✅ Yangi debtor yaratildi: ${orderDebtUsd} USD, ${orderDebtUzs} UZS`);
         }
+
       } else {
-        // Agar order da debt yo'q bo'lsa, mijozning qarzini 0 ga tenglash
-        await Client.findByIdAndUpdate(order.client._id, {
+        // Agar order da debt yo'q bo'lsa yoki status completed emas bo'lsa
+        console.log(`Order da debt yo'q yoki status completed emas`);
+        
+        // 1. Mijozning qarzini 0 ga tenglash
+        const updatedClient = await Client.findByIdAndUpdate(order.client._id, {
           $set: {
             "debt.usd": 0,
             "debt.uzs": 0,
           }
+        }, { new: true });
+
+        if (!updatedClient) {
+          console.error(`❌ ERROR: Client debt 0 ga tenglanmadi. ClientID: ${order.client._id}`);
+        } else {
+          console.log(`✅ Client debt 0 ga tenglandi`);
+        }
+
+        // 2. Barcha pending debtor yozuvlarini paid ga o'zgartirish
+        const debtorsToUpdate = await Debtor.find({
+          client: order.client._id,
+          status: { $ne: "paid" }
         });
 
-        // Debtor statusini paid ga o'zgartirish
-        if (debtor) {
+        for (let debtor of debtorsToUpdate) {
           await Debtor.findByIdAndUpdate(debtor._id, {
             $set: {
               "currentDebt.usd": 0,
@@ -897,21 +951,203 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`,
               status: "paid"
             }
           });
+          console.log(`✅ Debtor ${debtor._id} paid ga o'zgartirildi`);
         }
       }
 
-      console.log(`✅ SUCCESS: Order ${orderId} uchun qarzlar yangilandi: ${orderDebtUsd} USD, ${orderDebtUzs} UZS`);
+      // 3. Tekshirish: Client va Debtor qarz miqdorlari bir xil ekanligini tasdiqlash
+      const finalClient = await Client.findById(order.client._id);
+      
+      // 4. Duplicate debtor larni tozalash - faqat bitta active debtor qoldirish
+      const allDebtors = await Debtor.find({ client: order.client._id });
+      const activeDebtors = allDebtors.filter(d => d.status !== "paid" && (d.currentDebt.usd > 0 || d.currentDebt.uzs > 0));
+      const paidDebtors = allDebtors.filter(d => d.status === "paid" || (d.currentDebt.usd === 0 && d.currentDebt.uzs === 0));
+      
+      // Paid debtor larni o'chirish
+      for (let paidDebtor of paidDebtors) {
+        await Debtor.findByIdAndDelete(paidDebtor._id);
+        console.log(`🗑️ Keraksiz paid debtor o'chirildi: ${paidDebtor._id}`);
+      }
+      
+      // Agar bir nechta active debtor bor bo'lsa, ularni bitta ga birlashtirish
+      if (activeDebtors.length > 1) {
+        console.log(`⚠️ ${activeDebtors.length} ta active debtor topildi, bitta ga birlashtirish...`);
+        
+        let totalUsd = 0;
+        let totalUzs = 0;
+        let combinedDescription = "";
+        
+        for (let debtor of activeDebtors) {
+          totalUsd += debtor.currentDebt.usd || 0;
+          totalUzs += debtor.currentDebt.uzs || 0;
+          combinedDescription += (combinedDescription ? "; " : "") + debtor.description;
+        }
+        
+        // Birinchi debtor ni saqlash, qolganlarini o'chirish
+        const mainDebtor = activeDebtors[0];
+        await Debtor.findByIdAndUpdate(mainDebtor._id, {
+          $set: {
+            "currentDebt.usd": totalUsd,
+            "currentDebt.uzs": totalUzs,
+            description: combinedDescription,
+            status: (totalUsd === 0 && totalUzs === 0) ? "paid" : "pending"
+          }
+        });
+        
+        // Qolgan debtor larni o'chirish
+        for (let i = 1; i < activeDebtors.length; i++) {
+          await Debtor.findByIdAndDelete(activeDebtors[i]._id);
+          console.log(`🗑️ Duplicate debtor o'chirildi: ${activeDebtors[i]._id}`);
+        }
+        
+        console.log(`✅ Debtor lar birlashtirildi: ${totalUsd} USD, ${totalUzs} UZS`);
+      }
+      
+      const finalDebtor = await Debtor.findOne({
+        client: order.client._id,
+        status: { $ne: "paid" }
+      });
+
+      const clientDebt = {
+        usd: finalClient.debt?.usd || 0,
+        uzs: finalClient.debt?.uzs || 0
+      };
+
+      const debtorDebt = {
+        usd: finalDebtor?.currentDebt?.usd || 0,
+        uzs: finalDebtor?.currentDebt?.uzs || 0
+      };
+
+      // Qarzlar bir xil ekanligini tekshirish
+      if (clientDebt.usd !== debtorDebt.usd || clientDebt.uzs !== debtorDebt.uzs) {
+        console.error(`❌ WARNING: Client va Debtor qarz miqdorlari mos kelmaydi!`);
+        console.error(`Client debt: ${clientDebt.usd} USD, ${clientDebt.uzs} UZS`);
+        console.error(`Debtor debt: ${debtorDebt.usd} USD, ${debtorDebt.uzs} UZS`);
+      } else {
+        console.log(`✅ SUCCESS: Client va Debtor qarz miqdorlari mos keladi: ${clientDebt.usd} USD, ${clientDebt.uzs} UZS`);
+      }
+
+      console.log(`✅ SUCCESS: Order ${orderId} uchun qarzlar yangilandi`);
       return { 
         success: true, 
         message: "Qarzlar muvaffaqiyatli yangilandi",
         data: {
           orderDebt: { usd: orderDebtUsd, uzs: orderDebtUzs },
-          orderPaid: { usd: orderPaidUsd, uzs: orderPaidUzs }
+          orderPaid: { usd: orderPaidUsd, uzs: orderPaidUzs },
+          clientDebt: clientDebt,
+          debtorDebt: debtorDebt,
+          status: order.status
         }
       };
       
     } catch (error) {
       console.error("❌ GLOBAL ERROR: Order qarzlarini yangilashda umumiy xatolik:", {
+        error: error.message,
+        orderId: orderId,
+        stack: error.stack
+      });
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Order cancelled/pending qilinganda faqat ushbu order qarzini kamaytirish
+  async removeOrderDebtOnly(orderId) {
+    try {
+      console.log(`Order cancelled/pending qilinganda faqat ushbu order qarzini kamaytirish. OrderID: ${orderId}`);
+
+      const Order = require("../models/orders/order.model");
+      const Client = require("../models/clients/client.model");
+      const Debtor = require("../models/debtors/debtor.model");
+
+      // Order ma'lumotlarini olish
+      const order = await Order.findById(orderId).populate("client");
+        
+      if (!order) {
+        console.error(`❌ ERROR: Order topilmadi. OrderID: ${orderId}`);
+        return { success: false, message: "Order topilmadi" };
+      }
+
+      if (!order.client) {
+        console.error(`❌ ERROR: Order uchun mijoz topilmadi. OrderID: ${orderId}`);
+        return { success: false, message: "Mijoz topilmadi" };
+      }
+
+      // Order qarz miqdori
+      const orderDebtUsd = order.debtAmount?.usd || 0;
+      const orderDebtUzs = order.debtAmount?.uzs || 0;
+
+      console.log(`Order dan kamaytiriladigan debt: ${orderDebtUsd} USD, ${orderDebtUzs} UZS`);
+
+      // Faqat ushbu order qarzini kamaytirish
+      if (orderDebtUsd > 0 || orderDebtUzs > 0) {
+        // 1. Client dan ushbu order qarzini kamaytirish
+        const currentClient = await Client.findById(order.client._id);
+        const currentClientDebtUsd = currentClient.debt?.usd || 0;
+        const currentClientDebtUzs = currentClient.debt?.uzs || 0;
+
+        // Yangi client debt = eski debt - ushbu order debt
+        const newClientDebtUsd = Math.max(0, currentClientDebtUsd - orderDebtUsd);
+        const newClientDebtUzs = Math.max(0, currentClientDebtUzs - orderDebtUzs);
+
+        await Client.findByIdAndUpdate(order.client._id, {
+          $set: {
+            "debt.usd": newClientDebtUsd,
+            "debt.uzs": newClientDebtUzs,
+          }
+        });
+
+        console.log(`✅ Client debt dan kamaytirdi: eski(${currentClientDebtUsd} USD, ${currentClientDebtUzs} UZS) - order(${orderDebtUsd} USD, ${orderDebtUzs} UZS) = yangi(${newClientDebtUsd} USD, ${newClientDebtUzs} UZS)`);
+
+        // 2. Debtor dan ushbu order qarzini kamaytirish
+        const debtor = await Debtor.findOne({
+          client: order.client._id,
+          status: { $ne: "paid" }
+        });
+
+        if (debtor) {
+          const currentDebtorDebtUsd = debtor.currentDebt?.usd || 0;
+          const currentDebtorDebtUzs = debtor.currentDebt?.uzs || 0;
+          
+          const newDebtorDebtUsd = Math.max(0, currentDebtorDebtUsd - orderDebtUsd);
+          const newDebtorDebtUzs = Math.max(0, currentDebtorDebtUzs - orderDebtUzs);
+
+          // Agar debtor debt 0 bo'lsa, status ni paid ga o'zgartirish
+          const newStatus = (newDebtorDebtUsd === 0 && newDebtorDebtUzs === 0) ? "paid" : debtor.status;
+
+          await Debtor.findByIdAndUpdate(debtor._id, {
+            $set: {
+              "currentDebt.usd": newDebtorDebtUsd,
+              "currentDebt.uzs": newDebtorDebtUzs,
+              status: newStatus,
+              description: `${debtor.description}; Order #${order._id} dan -${orderDebtUsd} USD, -${orderDebtUzs} UZS kamaytirdi`
+            }
+          });
+
+          console.log(`✅ Debtor debt dan kamaytirdi: eski(${currentDebtorDebtUsd} USD, ${currentDebtorDebtUzs} UZS) - order(${orderDebtUsd} USD, ${orderDebtUzs} UZS) = yangi(${newDebtorDebtUsd} USD, ${newDebtorDebtUzs} UZS), status: ${newStatus}`);
+        }
+        
+        // Duplicate debtor larni tozalash
+        const allDebtors = await Debtor.find({ client: order.client._id });
+        const paidDebtors = allDebtors.filter(d => d.status === "paid" || (d.currentDebt.usd === 0 && d.currentDebt.uzs === 0));
+        
+        // Paid debtor larni o'chirish
+        for (let paidDebtor of paidDebtors) {
+          await Debtor.findByIdAndDelete(paidDebtor._id);
+          console.log(`🗑️ Paid debtor o'chirildi (removeOrderDebtOnly): ${paidDebtor._id}`);
+        }
+      }
+
+      console.log(`✅ SUCCESS: Order ${orderId} qarzi muvaffaqiyatli kamaytirdi`);
+      return { 
+        success: true, 
+        message: "Order qarzi muvaffaqiyatli kamaytirdi",
+        data: {
+          removedDebt: { usd: orderDebtUsd, uzs: orderDebtUzs }
+        }
+      };
+      
+    } catch (error) {
+      console.error("❌ GLOBAL ERROR: Order qarzini kamayttirishda umumiy xatolik:", {
         error: error.message,
         orderId: orderId,
         stack: error.stack

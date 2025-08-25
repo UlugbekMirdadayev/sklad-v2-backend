@@ -213,6 +213,39 @@ const clientValidation = [
     .trim()
     .notEmpty()
     .withMessage("Номер автомобиля обязателен"),
+  body("debt")
+    .optional()
+    .custom((value) => {
+      if (typeof value === 'object' && value !== null) {
+        // Если это объект, проверяем поля usd и uzs
+        if (typeof value.usd !== 'number' || typeof value.uzs !== 'number') {
+          throw new Error('debt.usd и debt.uzs должны быть числами');
+        }
+        if (value.usd < 0 || value.uzs < 0) {
+          throw new Error('debt не может быть отрицательным');
+        }
+        return true;
+      } else if (typeof value === 'string') {
+        // Если это строка, пытаемся парсить JSON
+        try {
+          const parsed = JSON.parse(value);
+          if (typeof parsed.usd !== 'number' || typeof parsed.uzs !== 'number') {
+            throw new Error('debt.usd и debt.uzs должны быть числами');
+          }
+          if (parsed.usd < 0 || parsed.uzs < 0) {
+            throw new Error('debt не может быть отрицательным');
+          }
+          return true;
+        } catch (e) {
+          throw new Error('debt должен быть объектом {usd: number, uzs: number} или JSON строкой');
+        }
+      } else if (value === 0 || value === null || value === undefined) {
+        // Разрешаем значения по умолчанию
+        return true;
+      }
+      throw new Error('debt должен быть объектом {usd: number, uzs: number}');
+    })
+    .withMessage("debt должен быть объектом с полями usd и uzs"),
 ];
 
 router.post(
@@ -277,7 +310,28 @@ router.post("/", clientValidation, async (req, res) => {
     if (!password) {
       return res.status(400).json({ message: "Parol majburiy" });
     }
-    const hashedPassword = await bcrypt.hash(password, 10); // Обработка автомобилей
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Обработка поля debt
+    let debtValue = { usd: 0, uzs: 0 };
+    if (req.body.debt) {
+      if (typeof req.body.debt === 'string') {
+        try {
+          debtValue = JSON.parse(req.body.debt);
+        } catch (e) {
+          return res.status(400).json({ message: "Неверный формат debt" });
+        }
+      } else if (typeof req.body.debt === 'object') {
+        debtValue = req.body.debt;
+      }
+      
+      // Проверяем что значения являются числами
+      if (typeof debtValue.usd !== 'number' || typeof debtValue.uzs !== 'number') {
+        return res.status(400).json({ message: "debt.usd и debt.uzs должны быть числами" });
+      }
+    }
+
+    // Обработка автомобилей
     const cars = req.body.cars || [];
     const plateNumbers = new Set();
     for (const car of cars) {
@@ -296,7 +350,7 @@ router.post("/", clientValidation, async (req, res) => {
       phone,
       password: hashedPassword,
       cars,
-      debt: req.body.debt || 0,
+      debt: debtValue,
       partialPayments: req.body.partialPayments || [],
     });
 
@@ -399,6 +453,27 @@ router.patch("/:id", authMiddleware, clientValidation, async (req, res) => {
           car.model = car.model._id;
         }
       }
+    }
+
+    // Обработка поля debt
+    if (req.body.debt !== undefined) {
+      let debtValue = { usd: 0, uzs: 0 };
+      if (typeof req.body.debt === 'string') {
+        try {
+          debtValue = JSON.parse(req.body.debt);
+        } catch (e) {
+          return res.status(400).json({ message: "Неверный формат debt" });
+        }
+      } else if (typeof req.body.debt === 'object' && req.body.debt !== null) {
+        debtValue = req.body.debt;
+      }
+      
+      // Проверяем что значения являются числами
+      if (typeof debtValue.usd !== 'number' || typeof debtValue.uzs !== 'number') {
+        return res.status(400).json({ message: "debt.usd и debt.uzs должны быть числами" });
+      }
+      
+      req.body.debt = debtValue;
     }
 
     const allowedFields = [

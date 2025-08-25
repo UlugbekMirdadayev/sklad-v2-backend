@@ -35,7 +35,12 @@ router.post("/cash-in", async (req, res) => {
     }
     const isClient = client ? await Client.findById(client) : null;
     if (isClient?.isVip) {
-      isClient.debt -= amount.usd;
+      // Убеждаемся что debt - это объект
+      if (!isClient.debt || typeof isClient.debt !== 'object') {
+        isClient.debt = { usd: 0, uzs: 0 };
+      }
+      isClient.debt.usd = (isClient.debt.usd || 0) - (amount.usd || 0);
+      isClient.debt.uzs = (isClient.debt.uzs || 0) - (amount.uzs || 0);
       await isClient.save();
     }
     const transaction = await Transaction.create({
@@ -69,7 +74,11 @@ router.post("/cash-out", async (req, res) => {
     }
     const isClient = client ? await Client.findById(client) : null;
     if (isClient?.isVip) {
-      isClient.debt += amount.usd;
+      if (!isClient.debt) {
+        isClient.debt = { usd: 0, uzs: 0 };
+      }
+      isClient.debt.usd = Number(isClient.debt.usd) + amount.usd;
+      isClient.debt.uzs = Number(isClient.debt.uzs) + amount.uzs;
       await isClient.save();
     }
     const transaction = await Transaction.create({
@@ -109,29 +118,46 @@ router.put("/:id", async (req, res) => {
     if (client && client !== String(transaction.client)) {
       const oldClient = await Client.findById(transaction.client);
       if (oldClient?.isVip) {
+        if (!oldClient.debt) {
+          oldClient.debt = { usd: 0, uzs: 0 };
+        }
         if (transaction.type === "cash-in") {
-          oldClient.debt += transaction.amount.usd;
+          oldClient.debt.usd = Number(oldClient.debt.usd) + transaction.amount.usd;
+          oldClient.debt.uzs = Number(oldClient.debt.uzs) + transaction.amount.uzs;
         } else if (transaction.type === "cash-out") {
-          oldClient.debt -= transaction.amount.usd;
+          oldClient.debt.usd = Number(oldClient.debt.usd) - transaction.amount.usd;
+          oldClient.debt.uzs = Number(oldClient.debt.uzs) - transaction.amount.uzs;
         }
         await oldClient.save();
       }
       const newClient = await Client.findById(client);
-      if (transaction.type === "cash-in") {
-        newClient.debt -= amount.usd;
-      } else if (transaction.type === "cash-out") {
-        newClient.debt += amount.usd;
+      if (newClient?.isVip) {
+        if (!newClient.debt) {
+          newClient.debt = { usd: 0, uzs: 0 };
+        }
+        if (transaction.type === "cash-in") {
+          newClient.debt.usd = Number(newClient.debt.usd) - amount.usd;
+          newClient.debt.uzs = Number(newClient.debt.uzs) - amount.uzs;
+        } else if (transaction.type === "cash-out") {
+          newClient.debt.usd = Number(newClient.debt.usd) + amount.usd;
+          newClient.debt.uzs = Number(newClient.debt.uzs) + amount.uzs;
+        }
+        await newClient.save();
       }
-      await newClient.save();
       transaction.client = client;
     } else if (client) {
       // Если client не меняется, обновить долг по новой сумме
       const curClient = await Client.findById(client);
       if (curClient?.isVip) {
+        if (!curClient.debt) {
+          curClient.debt = { usd: 0, uzs: 0 };
+        }
         if (transaction.type === "cash-in") {
-          curClient.debt += transaction.amount.usd - amount.usd;
+          curClient.debt.usd = Number(curClient.debt.usd) + transaction.amount.usd - amount.usd;
+          curClient.debt.uzs = Number(curClient.debt.uzs) + transaction.amount.uzs - amount.uzs;
         } else if (transaction.type === "cash-out") {
-          curClient.debt -= transaction.amount.usd - amount.usd;
+          curClient.debt.usd = Number(curClient.debt.usd) - transaction.amount.usd + amount.usd;
+          curClient.debt.uzs = Number(curClient.debt.uzs) - transaction.amount.uzs + amount.uzs;
         }
         await curClient.save();
       }

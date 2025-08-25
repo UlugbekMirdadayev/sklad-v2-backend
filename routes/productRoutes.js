@@ -255,8 +255,7 @@ router.post(
       await product.save();
       const populatedProduct = await Product.findById(product._id)
         .populate("createdBy", "-password")
-        .populate("branch")
-        .populate("batch_number");
+        .populate("branch");
 
       res.status(201).json(populatedProduct);
     } catch (error) {
@@ -280,7 +279,6 @@ router.get("/", async (req, res) => {
       minSalePrice,
       maxSalePrice,
       search,
-      batch_number,
       isAvailable,
       page = 1,
       limit = 10,
@@ -315,7 +313,6 @@ router.get("/", async (req, res) => {
     const query = { isDeleted: false };
     if (name) query.name = { $regex: name, $options: "i" };
     if (createdBy) query.createdBy = createdBy;
-    if (batch_number) query.batch_number = batch_number;
     if (minCostPrice || maxCostPrice) {
       query.costPrice = {};
       if (minCostPrice) query.costPrice.$gte = Number(minCostPrice);
@@ -339,7 +336,6 @@ router.get("/", async (req, res) => {
     const products = await Product.find(query)
       .populate("createdBy", "-password")
       .populate("branch")
-      .populate("batch_number")
       .sort({ [sortField]: sortDirection })
       .skip(skip)
       .limit(limitNumber);
@@ -377,7 +373,6 @@ router.get("/:id", async (req, res) => {
     })
       .populate("createdBy", "-password")
       .populate("branch")
-      .populate("batch_number");
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     // Примечание: URL изображений обновляются через cron job каждые 4 часа
@@ -531,7 +526,6 @@ router.patch(
       const populatedProduct = await Product.findById(product._id)
         .populate("createdBy", "-password")
         .populate("branch")
-        .populate("batch_number");
 
       res.json(populatedProduct);
     } catch (error) {
@@ -598,7 +592,6 @@ router.post(
       const populatedProduct = await Product.findById(product._id)
         .populate("createdBy", "-password")
         .populate("branch")
-        .populate("batch_number");
 
       res.json({
         message: "Images added successfully",
@@ -641,7 +634,6 @@ router.delete("/:id/images/:fileId", authMiddleware, async (req, res) => {
     const populatedProduct = await Product.findById(product._id)
       .populate("createdBy", "-password")
       .populate("branch")
-      .populate("batch_number");
 
     res.json({
       message: "Image removed successfully",
@@ -702,7 +694,6 @@ router.get("/search/:query", async (req, res) => {
     const products = await Product.find(searchQuery)
       .populate("createdBy", "-password")
       .populate("branch")
-      .populate("batch_number")
       .sort({ [sortField]: sortDirection })
       .skip(skip)
       .limit(limitNumber);
@@ -825,9 +816,6 @@ module.exports = router;
  *         branch:
  *           type: string
  *           description: ID of the branch
- *         batch_number:
- *           type: string
- *           description: Batch number
  *         vipPrice:
  *           type: number
  *           description: VIP price for special customers
@@ -931,10 +919,6 @@ module.exports = router;
  *           type: string
  *           example: "507f1f77bcf86cd799439012"
  *           description: ID of the branch
- *         batch_number:
- *           type: string
- *           example: "BATCH001"
- *           description: Batch number
  *         vipPrice:
  *           type: number
  *           example: 70000
@@ -1017,9 +1001,6 @@ module.exports = router;
  *         branch:
  *           type: string
  *           description: ID of the branch
- *         batch_number:
- *           type: string
- *           description: Batch number
  *         vipPrice:
  *           type: number
  *           description: VIP price for special customers
@@ -1082,9 +1063,6 @@ module.exports = router;
  *         branch:
  *           type: string
  *           description: ID of the branch
- *         batch_number:
- *           type: string
- *           description: Batch number
  *         vipPrice:
  *           type: number
  *           description: VIP price for special customers
@@ -1133,7 +1111,6 @@ module.exports = router;
  *             currency: "UZS"
  *             createdBy: "507f1f77bcf86cd799439011"
  *             branch: "507f1f77bcf86cd799439012"
- *             batch_number: "BATCH001"
  *             description: "High quality motor oil"
  *             vipPrice: 70000
  *             isAvailable: true
@@ -1186,11 +1163,6 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Filter by creator ID
- *       - in: query
- *         name: batch_number
- *         schema:
- *           type: string
- *         description: Filter by batch number
  *       - in: query
  *         name: minCostPrice
  *         schema:

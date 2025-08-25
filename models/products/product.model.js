@@ -81,10 +81,6 @@ const productSchema = withBaseFields({
     ref: "Admin",
     required: true,
   },
-  batch_number: {
-    type: String,
-    default: null,
-  },
   vipPrice: {
     type: Number,
     default: 0,

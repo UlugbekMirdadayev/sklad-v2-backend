@@ -30,7 +30,9 @@ const dashboardRoutes = require("./routes/dashboardRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const debtorRoutes = require("./routes/debtorRoutes");
 const smsRoutes = require("./routes/smsRoutes");
+const productImageUpdateRoutes = require("./routes/productImageUpdateRoutes");
 const smsNotificationService = require("./services/smsNotificationService");
+const productImageUpdateService = require("./services/productImageUpdateService");
 
 // Middleware
 app.use(express.json({ limit: "25mb" })); // Увеличиваем лимит для больших файлов
@@ -52,6 +54,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/debtors", debtorRoutes);
 app.use("/api/sms", smsRoutes);
+app.use("/api/product-image-update", productImageUpdateRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -109,5 +112,13 @@ server.listen(PORT, () => {
     console.log("SMS notification service avtomatik ishga tushirildi");
   } catch (error) {
     console.error("SMS notification service ishga tushirishda xatolik:", error.message);
+  }
+
+  // Product image update service'ini ishga tushirish
+  try {
+    productImageUpdateService.startScheduledUpdates();
+    console.log("Product image update service avtomatik ishga tushirildi");
+  } catch (error) {
+    console.error("Product image update service ishga tushirishda xatolik:", error.message);
   }
 });

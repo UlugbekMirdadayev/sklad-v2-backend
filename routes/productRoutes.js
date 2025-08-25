@@ -30,66 +30,6 @@ const isValidFileId = (str) => {
   return typeof str === "string" && !isURL(str) && str.length > 0;
 };
 
-/**
- * Обновляет fileURL для изображений продукта, получая актуальные URL из Telegram
- * @param {Object} product - Объект продукта
- * @returns {Promise<Object>} - Продукт с обновленными fileURL
- */
-async function updateProductImageUrls(product) {
-  if (!product || !product.images || product.images.length === 0) {
-    return product;
-  }
-
-  let needsUpdate = false;
-  const updatedImages = [];
-
-  for (const image of product.images) {
-    if (image.file_id && isValidFileId(image.file_id)) {
-      try {
-        // Получаем актуальный URL из Telegram
-        const freshFileURL = await getFileUrlFromTelegram(image.file_id);
-
-        // Если URL изменился, обновляем
-        if (freshFileURL !== image.fileURL) {
-          updatedImages.push({
-            ...(image.toObject ? image.toObject() : image),
-            fileURL: freshFileURL,
-          });
-          needsUpdate = true;
-        } else {
-          updatedImages.push(image);
-        }
-      } catch (error) {
-        console.warn(
-          `Не удалось обновить URL для file_id ${image.file_id}:`,
-          error.message
-        );
-        updatedImages.push(image); // Оставляем старый URL
-      }
-    } else {
-      updatedImages.push(image); // Если нет file_id, оставляем как есть
-    }
-  }
-
-  // Если были обновления, сохраняем в базу данных
-  if (needsUpdate && product._id) {
-    try {
-      await Product.findByIdAndUpdate(product._id, { images: updatedImages });
-      console.log(`Обновлены URL изображений для продукта ${product._id}`);
-    } catch (error) {
-      console.warn(
-        `Не удалось сохранить обновленные URL для продукта ${product._id}:`,
-        error.message
-      );
-    }
-  }
-
-  // Возвращаем продукт с обновленными URL
-  const updatedProduct = product.toObject ? product.toObject() : { ...product };
-  updatedProduct.images = updatedImages;
-  return updatedProduct;
-}
-
 /** Multer config for memory storage (для загрузки в Telegram) */
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -318,10 +258,7 @@ router.post(
         .populate("branch")
         .populate("batch_number");
 
-      // Обновляем fileURL перед отправкой ответа
-      const updatedProduct = await updateProductImageUrls(populatedProduct);
-
-      res.status(201).json(updatedProduct);
+      res.status(201).json(populatedProduct);
     } catch (error) {
       console.error("Error creating product:", error);
       res.status(500).json({
@@ -407,16 +344,10 @@ router.get("/", async (req, res) => {
       .skip(skip)
       .limit(limitNumber);
 
-    // Обновляем fileURL для всех продуктов
-    const updatedProducts = await Promise.all(
-      products.map(async (product) => {
-        return await updateProductImageUrls(product);
-      })
-    );
-
     // Возвращаем данные с метаинформацией о пагинации
+    // Примечание: URL изображений обновляются через cron job каждые 4 часа
     res.json({
-      data: updatedProducts,
+      data: products,
       pagination: {
         currentPage: pageNumber,
         totalPages,
@@ -449,10 +380,8 @@ router.get("/:id", async (req, res) => {
       .populate("batch_number");
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // Обновляем fileURL для продукта
-    const updatedProduct = await updateProductImageUrls(product);
-
-    res.json(updatedProduct);
+    // Примечание: URL изображений обновляются через cron job каждые 4 часа
+    res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -604,10 +533,7 @@ router.patch(
         .populate("branch")
         .populate("batch_number");
 
-      // Обновляем fileURL перед отправкой ответа
-      const updatedProduct = await updateProductImageUrls(populatedProduct);
-
-      res.json(updatedProduct);
+      res.json(populatedProduct);
     } catch (error) {
       console.error("Error updating product:", error);
       res.status(500).json({
@@ -674,12 +600,9 @@ router.post(
         .populate("branch")
         .populate("batch_number");
 
-      // Обновляем fileURL перед отправкой ответа
-      const updatedProduct = await updateProductImageUrls(populatedProduct);
-
       res.json({
         message: "Images added successfully",
-        product: updatedProduct,
+        product: populatedProduct,
         addedImages: newImages,
       });
     } catch (error) {
@@ -720,12 +643,9 @@ router.delete("/:id/images/:fileId", authMiddleware, async (req, res) => {
       .populate("branch")
       .populate("batch_number");
 
-    // Обновляем fileURL перед отправкой ответа
-    const updatedProduct = await updateProductImageUrls(populatedProduct);
-
     res.json({
       message: "Image removed successfully",
-      product: updatedProduct,
+      product: populatedProduct,
     });
   } catch (error) {
     console.error("Error removing image:", error);
@@ -787,15 +707,9 @@ router.get("/search/:query", async (req, res) => {
       .skip(skip)
       .limit(limitNumber);
 
-    // Обновляем fileURL для всех найденных продуктов
-    const updatedProducts = await Promise.all(
-      products.map(async (product) => {
-        return await updateProductImageUrls(product);
-      })
-    );
-
+    // Примечание: URL изображений обновляются через cron job каждые 4 часа
     res.json({
-      data: updatedProducts,
+      data: products,
       pagination: {
         currentPage: pageNumber,
         totalPages,

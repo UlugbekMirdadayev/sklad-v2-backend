@@ -5,7 +5,7 @@ const Transaction = require("../models/transactions/transaction.model");
 const Client = require("../models/clients/client.model");
 const authMiddleware = require("../middleware/authMiddleware");
 const { body, validationResult } = require("express-validator");
-const TransactionHelper = require('../utils/transactionHelper');
+const TransactionHelper = require("../utils/transactionHelper");
 
 /**
  * @swagger
@@ -493,10 +493,10 @@ router.post("/:id/payment", authMiddleware, async (req, res) => {
     // To'lov Transaction'ini TransactionHelper orqali qo'shish
     try {
       await TransactionHelper.createDebtPaymentTransaction(
-        debtor, 
-        payment, 
+        debtor,
+        payment,
         req.body.paymentType || "cash",
-        `Qarz to'lovi - ${debtor.description || 'Qarzdor #' + debtor._id}`
+        `Qarz to'lovi - ${debtor.description || "Qarzdor #" + debtor._id}`
       );
     } catch (transactionError) {
       console.error(
@@ -616,14 +616,18 @@ router.patch("/:id", authMiddleware, async (req, res) => {
     const clientId = debtor.client;
     if (clientId) {
       // Суммируем все активные долги клиента
-      const allDebts = await Debtor.find({ client: clientId, isDeleted: false });
-      let totalUsd = 0, totalUzs = 0;
+      const allDebts = await Debtor.find({
+        client: clientId,
+        isDeleted: false,
+      });
+      let totalUsd = 0,
+        totalUzs = 0;
       for (const d of allDebts) {
         totalUsd += d.currentDebt.usd || 0;
         totalUzs += d.currentDebt.uzs || 0;
       }
       await Client.findByIdAndUpdate(clientId, {
-        $set: { "debt.usd": totalUsd, "debt.uzs": totalUzs }
+        $set: { "debt.usd": totalUsd, "debt.uzs": totalUzs },
       });
     }
     // --- конец обновления ---
@@ -700,13 +704,13 @@ router.delete("/:id", authMiddleware, async (req, res) => {
         clientDoc.debt = { usd: 0, uzs: 0 };
       }
 
-      clientDoc.debt.usd = (clientDoc.debt.usd || 0) - debtor.currentDebt.usd;
-      clientDoc.debt.uzs = (clientDoc.debt.uzs || 0) - debtor.currentDebt.uzs;
+      clientDoc.debt.usd = 0;
+      clientDoc.debt.uzs = 0;
       await clientDoc.save();
 
       // --- debtni 0 ga o'rnatish ---
       await Client.findByIdAndUpdate(debtor.client, {
-        $set: { "debt.usd": 0, "debt.uzs": 0 }
+        $set: { "debt.usd": 0, "debt.uzs": 0 },
       });
       // --- end ---
     }
@@ -714,6 +718,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     // Soft delete
     debtor.isDeleted = true;
     debtor.deletedAt = new Date();
+    debtor.currentDebt = { usd: 0, uzs: 0 };
     await debtor.save();
 
     res.json({ message: "Qarzdor o'chirildi" });

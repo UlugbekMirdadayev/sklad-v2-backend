@@ -802,10 +802,10 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`,
     console.log("Test yakunlandi");
   }
 
-  // Order yaratilganda faqat qarzlarni yangilash (SMS yuborilmaydi)
+  // Order yaratilganda yoki yangilanganda faqat qarzlarni yangilash (SMS yuborilmaydi)
   async updateClientDebtOnly(orderId) {
     try {
-      console.log(`Order yaratilganda qarzlar yangilanmoqda. OrderID: ${orderId}`);
+      console.log(`Order yaratilganda/yangilanganda qarzlar yangilanmoqda. OrderID: ${orderId}`);
 
       const Order = require("../models/orders/order.model");
       const Client = require("../models/clients/client.model");
@@ -824,56 +824,39 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`,
         return { success: false, message: "Mijoz topilmadi" };
       }
 
-      // Eski qarzni topish
-      let previousDebtUsd = 0;
-      let previousDebtUzs = 0;
-      
-      const debtor = await Debtor.findOne({
+      // Mavjud debtor yozuvini topish
+      let debtor = await Debtor.findOne({
         client: order.client._id,
         status: { $ne: "paid" },
       });
 
-      if (debtor) {
-        previousDebtUsd = debtor.currentDebt?.usd || 0;
-        previousDebtUzs = debtor.currentDebt?.uzs || 0;
-      }
+      // Order qarz miqdori
+      const orderDebtUsd = order.debtAmount?.usd || 0;
+      const orderDebtUzs = order.debtAmount?.uzs || 0;
+      const orderPaidUsd = order.paidAmount?.usd || 0;
+      const orderPaidUzs = order.paidAmount?.uzs || 0;
 
-      // Hozirgi order summasi
-      const currentOrderUsd = order.totalAmount?.usd || 0;
-      const currentOrderUzs = order.totalAmount?.uzs || 0;
+      // Agar order da debt bor bo'lsa
+      if (orderDebtUsd > 0 || orderDebtUzs > 0) {
+        // Mijozning qarzini to'g'ridan to'g'ri order debt amount ga tenglash
+        await Client.findByIdAndUpdate(order.client._id, {
+          $set: {
+            "debt.usd": orderDebtUsd,
+            "debt.uzs": orderDebtUzs,
+          }
+        });
 
-      // Jami summa (eski qarz + hozirgi order)
-      const totalUsd = previousDebtUsd + currentOrderUsd;
-      const totalUzs = previousDebtUzs + currentOrderUzs;
-
-      // To'langan summa
-      const paidUsd = order.paidAmount?.usd || 0;
-      const paidUzs = order.paidAmount?.uzs || 0;
-
-      // Qolgan summa (yangi qarz)
-      const remainingUsd = totalUsd - paidUsd;
-      const remainingUzs = totalUzs - paidUzs;
-
-      // Mijozning qarzini yangilash
-      await Client.findByIdAndUpdate(order.client._id, {
-        $set: {
-          "debt.usd": Math.max(0, remainingUsd),
-          "debt.uzs": Math.max(0, remainingUzs),
-        }
-      });
-
-      // Debtor modelini yangilash yoki yaratish
-      if (remainingUsd > 0 || remainingUzs > 0) {
+        // Debtor yozuvini yangilash yoki yaratish
         if (debtor) {
           // Mavjud debtor ni yangilash
           await Debtor.findByIdAndUpdate(debtor._id, {
             $set: {
-              "currentDebt.usd": Math.max(0, remainingUsd),
-              "currentDebt.uzs": Math.max(0, remainingUzs),
-            },
-            $inc: {
-              "totalPaid.usd": paidUsd,
-              "totalPaid.uzs": paidUzs,
+              "currentDebt.usd": orderDebtUsd,
+              "currentDebt.uzs": orderDebtUzs,
+              "initialDebt.usd": orderDebtUsd,
+              "initialDebt.uzs": orderDebtUzs,
+              description: `Order #${order._id} uchun qarz`,
+              status: "pending"
             }
           });
         } else {
@@ -881,45 +864,49 @@ Zudlik bilan to'lov qiling. Ma'lumot: +998996572600`,
           await Debtor.create({
             client: order.client._id,
             currentDebt: {
-              usd: Math.max(0, remainingUsd),
-              uzs: Math.max(0, remainingUzs),
+              usd: orderDebtUsd,
+              uzs: orderDebtUzs,
             },
             initialDebt: {
-              usd: currentOrderUsd,
-              uzs: currentOrderUzs,
+              usd: orderDebtUsd,
+              uzs: orderDebtUzs,
             },
             totalPaid: {
-              usd: paidUsd,
-              uzs: paidUzs,
+              usd: 0,
+              uzs: 0,
             },
             description: `Order #${order._id} uchun qarz`,
             status: "pending"
           });
         }
-      } else if (debtor) {
-        // Agar qarz to'liq to'langan bo'lsa, debtor statusini paid ga o'zgartirish
-        await Debtor.findByIdAndUpdate(debtor._id, {
+      } else {
+        // Agar order da debt yo'q bo'lsa, mijozning qarzini 0 ga tenglash
+        await Client.findByIdAndUpdate(order.client._id, {
           $set: {
-            "currentDebt.usd": 0,
-            "currentDebt.uzs": 0,
-            status: "paid"
-          },
-          $inc: {
-            "totalPaid.usd": paidUsd,
-            "totalPaid.uzs": paidUzs,
+            "debt.usd": 0,
+            "debt.uzs": 0,
           }
         });
+
+        // Debtor statusini paid ga o'zgartirish
+        if (debtor) {
+          await Debtor.findByIdAndUpdate(debtor._id, {
+            $set: {
+              "currentDebt.usd": 0,
+              "currentDebt.uzs": 0,
+              status: "paid"
+            }
+          });
+        }
       }
 
-      console.log(`✅ SUCCESS: Order ${orderId} uchun qarzlar yangilandi: ${remainingUsd} USD, ${remainingUzs} UZS`);
+      console.log(`✅ SUCCESS: Order ${orderId} uchun qarzlar yangilandi: ${orderDebtUsd} USD, ${orderDebtUzs} UZS`);
       return { 
         success: true, 
         message: "Qarzlar muvaffaqiyatli yangilandi",
         data: {
-          previousDebt: { usd: previousDebtUsd, uzs: previousDebtUzs },
-          currentOrder: { usd: currentOrderUsd, uzs: currentOrderUzs },
-          paid: { usd: paidUsd, uzs: paidUzs },
-          remainingDebt: { usd: remainingUsd, uzs: remainingUzs }
+          orderDebt: { usd: orderDebtUsd, uzs: orderDebtUzs },
+          orderPaid: { usd: orderPaidUsd, uzs: orderPaidUzs }
         }
       };
       

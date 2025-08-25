@@ -880,7 +880,9 @@ router.patch("/:id", orderValidation, async (req, res) => {
     const oldOrder = {
       paidAmount: order.paidAmount,
       paymentType: order.paymentType,
-      status: order.status
+      status: order.status,
+      debtAmount: order.debtAmount,
+      totalAmount: order.totalAmount
     };
 
     Object.assign(order, req.body);
@@ -895,6 +897,45 @@ router.patch("/:id", orderValidation, async (req, res) => {
       await TransactionHelper.updateOrderTransaction(order._id, order, oldOrder);
     } catch (transactionError) {
       console.error("Transaction yangilashda xatolik:", transactionError.message);
+    }
+
+    // Обновить долги клиента и должника при обновлении заказа
+    if (order.debtAmount && (order.debtAmount.usd > 0 || order.debtAmount.uzs > 0) && order.client) {
+      try {
+        const result = await smsNotificationService.updateClientDebtOnly(order._id);
+        if (result.success) {
+          console.log(`Order ${order._id} yangilanganda qarzlar muvaffaqiyatli yangilandi`);
+        } else {
+          console.error(`Order ${order._id} yangilanganda qarzlarni yangilashda xatolik: ${result.message}`);
+        }
+      } catch (debtError) {
+        console.error(`Order ${order._id} yangilanganda qarzlarni yangilashda xatolik:`, debtError);
+      }
+    } else if (order.client) {
+      // Agar debt yo'q bo'lsa yoki 0 bo'lsa, mijozning qarzini 0 ga tenglashtirish va debtor statusini paid ga o'zgartirish
+      try {
+        await Client.findByIdAndUpdate(order.client, {
+          $set: {
+            "debt.usd": 0,
+            "debt.uzs": 0,
+          }
+        });
+
+        await Debtor.updateMany(
+          { client: order.client, status: { $ne: "paid" } },
+          {
+            $set: {
+              "currentDebt.usd": 0,
+              "currentDebt.uzs": 0,
+              status: "paid"
+            }
+          }
+        );
+        
+        console.log(`Order ${order._id} yangilanganda mijoz qarzlari 0 ga tenglashtirildi`);
+      } catch (debtError) {
+        console.error(`Order ${order._id} yangilanganda qarzlarni 0 ga tenglashtirishda xatolik:`, debtError);
+      }
     }
 
     res.json(order);
